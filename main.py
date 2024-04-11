@@ -24,6 +24,7 @@ class StateType(Enum):
 
 
 class TokenType(Enum):
+    PANIC = auto()
     KEYWORD = auto()
     IDENTIFIER = auto()
     NUMBER = auto()
@@ -127,8 +128,7 @@ class State:
         return self
 
     def add_default_transition(self, destination_state_id):
-        self.default_transition = State.states[destination_state_id]
-        return self
+        self.default_transition = State.states.get(destination_state_id)
 
     def next_state(self, char):
         return self.transitions.get(char, self.default_transition)
@@ -146,18 +146,22 @@ class Scanner:
     def get_next_token(self) -> Token:
         token_name = ''
         char = self.reader.get_char()
-        while char is not None and not self.current_state.is_final:
-            self.current_state = self.current_state.next_state(next_char=char)
+        while char is not None:
+            next_state = self.current_state.next_state(char)
+            if next_state is None:
+                # Handle the case where no valid transition exists.
+                # For example, transition to a PANIC state or return an error token.
+                return Token(TokenType.PANIC, "Invalid character sequence")
+            self.current_state = next_state
             if not self.current_state.is_star:
                 token_name += char
             char = self.reader.get_char() if not self.current_state.is_star else char
-
         if self.current_state.is_final:
-            if self.current_state.state_type == 'ID' and token_name in keywords:
-                return Token('KEYWORD', token_name)
+            if self.current_state.state_type == StateType.ID and token_name in keywords:
+                return Token(TokenType.KEYWORD, token_name)
             else:
                 return Token(self.current_state.state_type, token_name)
-        return Token('EOF', '')
+        return Token(TokenType.EOF, '')
 
     def get_tokens(self):
         while True:
@@ -165,10 +169,10 @@ class Scanner:
             line_number = self.reader.line_number
             token = self.get_next_token()
 
-            if token.token_type == StateType.EOF:
+            if token.token_type == TokenType.EOF:
                 break
 
-            if token.token_type == StateType.PANIC:
+            if token.token_type == TokenType.PANIC:
                 self.lexical_errors[line_number].append(token)
             else:
                 self.tokens[line_number].append(token)
