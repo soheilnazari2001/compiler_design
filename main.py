@@ -1,3 +1,6 @@
+# Soheil Nazari 99102412
+# Soroush Sherafat 99105504
+
 from enum import Enum, auto
 
 
@@ -205,7 +208,10 @@ class Scanner:
             if self.current_state.is_star:
                 self.reader.char_index -= 1
             else:
-                token_name += c
+                if c not in illegal_chars:
+                    token_name += c
+                else:
+                    token_name = c
 
         if self.current_state.state_type == TokenType.ID.name:
             self.symbol_table.add_symbol(token_name)
@@ -239,15 +245,8 @@ class Scanner:
         return s
 
     def repr_lexical_errors(self):
-        if not self.errors:
-            return 'There is no lexical error.'
-        s = ''
-        for line_number in self.errors:
-            s += str(line_number_str(line_number))
-            for token in self.errors[line_number]:
-                s += str(token) + ' '
-            s += '\n'
-        return s
+        return '\n'.join(map(lambda line_number:
+                             line_number_str(line_number) + ' '.join(map(str, self.errors[line_number])), self.errors))
 
 
 def main(file_name):
