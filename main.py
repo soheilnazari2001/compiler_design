@@ -208,16 +208,20 @@ class Scanner:
             if self.current_state.is_star:
                 self.reader.char_index -= 1
             else:
-                if c not in illegal_chars:
-                    token_name += c
+                if c in illegal_chars and token_name != '':
+                    if token_name[-1] == '/' or token_name[-1] == '*' or token_name[-1] == '=':
+                        token_name = c
+                    else:
+                        token_name += c
                 else:
-                    token_name = c
+                    token_name += c
 
         if self.current_state.state_type == TokenType.ID.name:
             self.symbol_table.add_symbol(token_name)
             if token_name in keywords:
                 return Token(TokenType.KEYWORD.name, token_name)
         elif self.current_state.state_type == TokenType.PANIC.name:
+
             token_name = token_name[:7] + '...' if len(token_name) > 7 else token_name
         return Token(self.current_state.state_type, token_name)
 
@@ -245,6 +249,8 @@ class Scanner:
         return s
 
     def repr_lexical_errors(self):
+        if not self.errors:
+            return 'There is no lexical error.'
         return '\n'.join(map(lambda line_number:
                              line_number_str(line_number) + ' '.join(map(str, self.errors[line_number])), self.errors))
 
