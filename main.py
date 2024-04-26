@@ -207,14 +207,11 @@ class Scanner:
             self.current_state = self.current_state.get_next_state(next_char=c)
             if self.current_state.is_star:
                 self.reader.char_index -= 1
+            elif c in illegal_chars and token_name in {"/", "*", "="}:
+                self.reader.char_index -= 1
+                return Token(TokenType.SYMBOL.name, token_name)
             else:
-                if c in illegal_chars and token_name != '':
-                    if token_name[-1] == '/' or token_name[-1] == '*' or token_name[-1] == '=':
-                        token_name = c
-                    else:
-                        token_name += c
-                else:
-                    token_name += c
+                token_name += c
 
         if self.current_state.state_type == TokenType.ID.name:
             self.symbol_table.add_symbol(token_name)
