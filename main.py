@@ -64,9 +64,9 @@ rules = {'Program': [['Declaration-list']],
          }
 
 first_and_follow = {'S': {'First': {'int'}, 'Follow': set()}, 'Program': {'First': {'int'}, 'Follow': {'$'}},
-                    'Declaration-list': {'First': {'int'}, 'Follow': {' +', '|', ' $'}},
+                    'Declaration-list': {'First': {'int'}, 'Follow': {'+', '|', '$'}},
                     'Declaration': {'First': {'int'}, 'Follow': {'int'}},
-                    'Declaration-initial': {'First': {'int'}, 'Follow': {' [', '('}},
+                    'Declaration-initial': {'First': {'int'}, 'Follow': {'[', '('}},
                     'Declaration-prime': {'First': {'('}, 'Follow': {'int'}},
                     'Var-declaration-prime': {'First': {';'}, 'Follow': {'int'}},
                     'Fun-declaration-prime': {'First': {'('}, 'Follow': {'|'}},
@@ -74,33 +74,33 @@ first_and_follow = {'S': {'First': {'int'}, 'Follow': set()}, 'Program': {'First
                     'Params': {'First': {'int'}, 'Follow': {')'}}, 'Param-list': {'First': {''}, 'Follow': {'|'}},
                     'Param': {'First': {'int'}, 'Follow': {''}}, 'Param-prime': {'First': {'['}, 'Follow': {''}},
                     'Compound-stmt': {'First': {'{'}, 'Follow': {'|'}},
-                    'Statement-list': {'First': {'+'}, 'Follow': {'}', ' |'}},
-                    'Statement': {'First': {'+'}, 'Follow': {' |', '+', ' endif'}},
+                    'Statement-list': {'First': {'+'}, 'Follow': {'}', '|'}},
+                    'Statement': {'First': {'+'}, 'Follow': {'|', '+', ' endif'}},
                     'Expression-stmt': {'First': {'+'}, 'Follow': {'|'}},
                     'Selection-stmt': {'First': {'if'}, 'Follow': {'|'}},
                     'Else-stmt': {'First': {'endif'}, 'Follow': {'|'}},
                     'Iteration-stmt': {'First': {'for'}, 'Follow': {'|'}},
-                    'Return-stmt': {'First': {'return'}, 'Follow': {' |', '+', ' endif'}},
-                    'Return-stmt-prime': {'First': {';'}, 'Follow': {' |', '+', ' endif'}},
-                    'Expression': {'First': {'+'}, 'Follow': {'', ' |', ' )', ' ', ' ]', ';'}},
-                    'B': {'First': {'='}, 'Follow': {'', ' |', ' )', ' ', ' ]', ';'}},
+                    'Return-stmt': {'First': {'return'}, 'Follow': {'|', '+', 'endif'}},
+                    'Return-stmt-prime': {'First': {';'}, 'Follow': {'|', '+', 'endif'}},
+                    'Expression': {'First': {'+'}, 'Follow': {'', '|', ')', ' ', ']', ';'}},
+                    'B': {'First': {'='}, 'Follow': {'', '|', ')', ' ', ']', ';'}},
                     'H': {'First': {'='}, 'Follow': set()},
                     'Simple-expression-zegond': {'First': {'+'}, 'Follow': {'|'}},
-                    'Simple-expression-prime': {'First': {'+'}, 'Follow': {'', ' |', ' )', ' ', ' ]', ';'}},
-                    'C': {'First': {'<'}, 'Follow': {'', ' )', ' ', '|', ' ;', ' ]'}},
+                    'Simple-expression-prime': {'First': {'+'}, 'Follow': {'', '|', ')', ' ', ']', ';'}},
+                    'C': {'First': {'<'}, 'Follow': {'', ')', ' ', '|', ';', ']'}},
                     'Relop': {'First': {'<'}, 'Follow': {'+'}},
                     'Additive-expression': {'First': {'+'}, 'Follow': {'|'}},
                     'Additive-expression-prime': {'First': {'+'}, 'Follow': {'<'}},
                     'Additive-expression-zegond': {'First': {'+'}, 'Follow': {'<'}},
-                    'D': {'First': {'+'}, 'Follow': {'<', ' |'}}, 'Addop': {'First': {'+'}, 'Follow': {'+'}},
-                    'Term': {'First': {'+'}, 'Follow': {' |', '+'}}, 'Term-prime': {'First': {'+'}, 'Follow': {'+'}},
-                    'Term-zegond': {'First': {'+'}, 'Follow': {'+'}}, 'G': {'First': {'*'}, 'Follow': {' |', '+'}},
+                    'D': {'First': {'+'}, 'Follow': {'<', '|'}}, 'Addop': {'First': {'+'}, 'Follow': {'+'}},
+                    'Term': {'First': {'+'}, 'Follow': {'|', '+'}}, 'Term-prime': {'First': {'+'}, 'Follow': {'+'}},
+                    'Term-zegond': {'First': {'+'}, 'Follow': {'+'}}, 'G': {'First': {'*'}, 'Follow': {'|', '+'}},
                     'Signed-factor': {'First': {'+'}, 'Follow': {'*'}},
                     'Signed-factor-prime': {'First': {'+'}, 'Follow': {'*'}},
                     'Signed-factor-zegond': {'First': {'+'}, 'Follow': {'*'}},
-                    'Factor': {'First': {'('}, 'Follow': {' |', '*'}},
+                    'Factor': {'First': {'('}, 'Follow': {'|', '*'}},
                     'Var-call-prime': {'First': {'('}, 'Follow': {'|'}}, 'Var-prime': {'First': {'['}, 'Follow': {'|'}},
-                    'Factor-prime': {'First': {'('}, 'Follow': {' |', '*'}},
+                    'Factor-prime': {'First': {'('}, 'Follow': {'|', '*'}},
                     'Factor-zegond': {'First': {'('}, 'Follow': {'*'}}, 'Args': {'First': {'+'}, 'Follow': {')'}},
                     'Arg-list': {'First': {'+'}, 'Follow': {'|'}}, 'Arg-list-prime': {'First': {''}, 'Follow': {'|'}}
                     }
@@ -390,11 +390,10 @@ class Parser:
         self.output_results()
 
     def program(self, parent):
-        child = Node("Program", parent=parent)
-        self.declaration_list(child)
+        self.declaration_list(parent)
 
     def declaration_list(self, parent):
-        child = Node("DeclarationList", parent=parent)
+        child = Node("Declaration-list", parent=parent)
         if self.lookahead.token_type in self.follow['Declaration-list']['First']:
             self.declaration(child)
             self.declaration_list(child)
@@ -407,19 +406,19 @@ class Parser:
         self.declaration_prime(child)
 
     def declaration_initial(self, parent):
-        child = Node("DeclarationInitial", parent=parent)
+        child = Node("Declaration-initial", parent=parent)
         self.type_specifier(child)
         self.match('ID', child)
 
     def declaration_prime(self, parent):
-        child = Node("DeclarationPrime", parent=parent)
+        child = Node("Declaration-prime", parent=parent)
         if self.lookahead.token_type == '(':
             self.fun_declaration_prime(child)
         else:
             self.var_declaration_prime(child)
 
     def var_declaration_prime(self, parent):
-        child = Node("VarDeclarationPrime", parent=parent)
+        child = Node("Var-declaration-prime", parent=parent)
         if self.lookahead.token_type == ';':
             self.match(';', child)
         else:
@@ -428,14 +427,14 @@ class Parser:
             self.match(']', child)
 
     def fun_declaration_prime(self, parent):
-        child = Node("FunDeclarationPrime", parent=parent)
+        child = Node("Fun-declaration-prime", parent=parent)
         self.match('(', child)
         self.params(child)
         self.match(')', child)
         self.compound_stmt(child)
 
     def type_specifier(self, parent):
-        child = Node("TypeSpecifier", parent=parent)
+        child = Node("Type-specifier", parent=parent)
         if self.lookahead.token_type in ['int', 'void']:
             self.match(self.lookahead.token_type, child)
 
@@ -450,7 +449,7 @@ class Parser:
             self.match('void', child)
 
     def param_list(self, parent):
-        child = Node("ParamList", parent=parent)
+        child = Node("Param-list", parent=parent)
         if self.lookahead.token_type == ',':
             self.match(',', child)
             self.param(child)
@@ -464,20 +463,20 @@ class Parser:
         self.param_prime(child)
 
     def param_prime(self, parent):
-        child = Node("ParamPrime", parent=parent)
+        child = Node("Param-prime", parent=parent)
         if self.lookahead.token_type == '[':
             self.match('[', child)
             self.match(']', child)
 
     def compound_stmt(self, parent):
-        child = Node("CompoundStmt", parent=parent)
+        child = Node("Compound-stmt", parent=parent)
         self.match('{', child)
         self.declaration_list(child)
         self.statement_list(child)
         self.match('}', child)
 
     def statement_list(self, parent):
-        child = Node("StatementList", parent=parent)
+        child = Node("Statement-list", parent=parent)
         if self.lookahead.token_type in first_and_follow['Statement-list']['First']:
             self.statement(child)
             self.statement_list(child)
@@ -498,7 +497,7 @@ class Parser:
         self.g(child)
 
     def signed_factor(self, parent):
-        child = Node("SignedFactor", parent=parent)
+        child = Node("Signed-factor", parent=parent)
         if self.lookahead.token_type in ['+', '-']:
             self.match(self.lookahead.token_type, child)
         self.factor(child)
@@ -516,7 +515,7 @@ class Parser:
             self.match('NUM', child)
 
     def var_call_prime(self, parent):
-        child = Node("VarCallPrime", parent=parent)
+        child = Node("Var-call-prime", parent=parent)
         if self.lookahead.token_type == '(':
             self.match('(', child)
             self.args(child)
@@ -536,18 +535,18 @@ class Parser:
             return
 
     def term_zegond(self, parent):
-        child = Node("TermZegond", parent=parent)
+        child = Node("Term-zegond", parent=parent)
         self.signed_factor_zegond(child)
         self.g(child)
 
     def signed_factor_zegond(self, parent):
-        child = Node("SignedFactorZegond", parent=parent)
+        child = Node("Signed-factor-zegond", parent=parent)
         if self.lookahead.token_type in ['+', '-']:
             self.match(self.lookahead.token_type, child)
         self.factor_zegond(child)
 
     def factor_zegond(self, parent):
-        child = Node("FactorZegond", parent=parent)
+        child = Node("Factor-zegond", parent=parent)
         if self.lookahead.token_type == '(':
             self.match('(', child)
             self.expression(child)
@@ -572,7 +571,7 @@ class Parser:
             self.error("Invalid statement", child)
 
     def expression_stmt(self, parent):
-        child = Node("ExpressionStmt", parent=parent)
+        child = Node("Expression-stmt", parent=parent)
         if self.lookahead.token_type in ['+', 'ID', 'NUM']:  # Assuming '+' starts an expression
             self.expression(child)
             self.match(';', child)
@@ -583,7 +582,7 @@ class Parser:
             self.match(';', child)
 
     def selection_stmt(self, parent):
-        child = Node("SelectionStmt", parent=parent)
+        child = Node("Selection-stmt", parent=parent)
         self.match('if', child)
         self.match('(', child)
         self.expression(child)
@@ -592,7 +591,7 @@ class Parser:
         self.else_stmt(child)
 
     def else_stmt(self, parent):
-        child = Node("ElseStmt", parent=parent)
+        child = Node("Else-stmt", parent=parent)
         if self.lookahead.token_type == 'else':
             self.match('else', child)
             self.statement(child)
@@ -601,7 +600,7 @@ class Parser:
             self.match('endif', child)
 
     def iteration_stmt(self, parent):
-        child = Node("IterationStmt", parent=parent)
+        child = Node("Iteration-stmt", parent=parent)
         self.match('for', child)
         self.match('(', child)
         self.expression(child)
@@ -613,12 +612,12 @@ class Parser:
         self.statement(child)
 
     def return_stmt(self, parent):
-        child = Node("ReturnStmt", parent=parent)
+        child = Node("Return-stmt", parent=parent)
         self.match('return', child)
         self.return_stmt_prime(child)
 
     def return_stmt_prime(self, parent):
-        child = Node("ReturnStmtPrime", parent=parent)
+        child = Node("Return-stmt-prime", parent=parent)
         if self.lookahead.token_type == ';':
             self.match(';', child)
         else:
@@ -635,13 +634,13 @@ class Parser:
             self.simple_expression_zegond(child)
 
     def simple_expression_zegond(self, parent):
-        child = Node("SimpleExpressionZegond", parent=parent)
+        child = Node("Simple-expression-zegond", parent=parent)
         self.additive_expression_zegond(child)
         if self.lookahead.token_type in first_and_follow['C']['First']:
             self.c(child)
 
     def additive_expression_zegond(self, parent):
-        child = Node("AdditiveExpressionZegond", parent=parent)
+        child = Node("Additive-expression-zegond", parent=parent)
         self.term_zegond(child)
         self.d(child)
 
@@ -659,12 +658,12 @@ class Parser:
             return
 
     def arg_list(self, parent):
-        child = Node("ArgList", parent=parent)
+        child = Node("Arg-list", parent=parent)
         self.expression(child)
         self.arg_list_prime(child)
 
     def arg_list_prime(self, parent):
-        child = Node("ArgListPrime", parent=parent)
+        child = Node("Arg-list-prime", parent=parent)
         if self.lookahead.token_type == ',':
             self.match(',', child)
             self.expression(child)
@@ -678,12 +677,13 @@ class Parser:
             self.match(self.lookahead.token_type, child)
 
     def additive_expression(self, parent):
-        child = Node("AdditiveExpression", parent=parent)
+        child = Node("Additive-expression", parent=parent)
         self.term(child)
         self.d(child)
 
     def output_results(self):
         with open('parse_tree.txt', 'w') as tree_file:
+            print(RenderTree(self.root))
             for pre, _, node in RenderTree(self.root):
                 tree_file.write(f"{pre}{node.name}\n")
 
@@ -702,6 +702,10 @@ def main(file_name):
         scanner.get_tokens()
         parser = Parser(scanner)
         parser.parse()
+        with open('tokens.txt', 'w') as tokens_file:
+            tokens_file.write(str(scanner))
+        with open('symbol_table.txt', 'w') as symbols_file:
+            symbols_file.write(str(scanner.symbol_table))
 
 
 if __name__ == '__main__':
