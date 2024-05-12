@@ -1,6 +1,3 @@
-# Soheil Nazari 99102412
-# Soroush Sherafat 99105504
-
 from enum import Enum, auto
 
 
@@ -75,7 +72,7 @@ class Token:
         self.token_type = token_type
         self.token_value = token_value
 
-    def __str__(self):
+    def __repr__(self):
         return f'({self.token_type}, {self.token_value})'
 
 
@@ -236,9 +233,9 @@ class Scanner:
 
     def __str__(self):
         s = ''
-        for line_number in self.tokens:
+        for line_number, line_tokens in self.tokens.items():
             line_tokens = ''
-            for token in self.tokens[line_number]:
+            for token in line_tokens:
                 if token.token_type not in hidden_tokens:
                     line_tokens += str(token) + ' '
             if line_tokens:
