@@ -406,24 +406,24 @@ class Parser:
     def next_token(self):
         self.lookahead = self.scanner.get_next_token()
 
-    def match(self, expected_token_type, parent):
-        if self.lookahead.token_type == expected_token_type:
-            child = Node(expected_token_type, parent=parent, name=expected_token_type)
+    def match(self, expected_token_value, parent):
+        if self.lookahead.token_value == expected_token_value:
+            child = Node(expected_token_value, parent=parent, name=expected_token_value)
             self.next_token()
             return child
         else:
-            self.error(f"Expected {expected_token_type}, but found {self.lookahead.token_type}", parent)
-            return Node(f"error: expected {expected_token_type}", parent=parent,
-                        name=f"error: expected {expected_token_type}")
+            self.error(f"Expected {expected_token_value}, but found {self.lookahead.token_value}", parent)
+            return Node(f"error: expected {expected_token_value}", parent=parent,
+                        name=f"error: expected {expected_token_value}")
 
     def error(self, message, parent):
-        self.errors.append(f"Syntax error: {message} at line {self.lookahead.line_number}")
+        self.errors.append(f"Syntax error: {message}")
         self.panic_mode_recovery(parent)
 
     def panic_mode_recovery(self, parent):
         non_terminal = parent.name
         follow_set = self.follow[non_terminal]['Follow']
-        while self.lookahead.token_type not in follow_set and self.lookahead.token_type != 'EOF':
+        while self.lookahead.token_value not in follow_set and self.lookahead.token_value != 'EOF':
             self.next_token()
 
     def parse(self):
@@ -435,7 +435,7 @@ class Parser:
 
     def declaration_list(self, parent):
         child = Node("Declaration-list", parent=parent)
-        if self.lookahead.token_type in self.follow['Declaration-list']['First']:
+        if self.lookahead.token_value in self.follow['Declaration-list']['First']:
             self.declaration(child)
             self.declaration_list(child)
         elif 'EPSILON' in rules['Declaration-list'][1]:
@@ -453,19 +453,20 @@ class Parser:
 
     def declaration_prime(self, parent):
         child = Node("Declaration-prime", parent=parent)
-        if self.lookahead.token_type == '(':
+        if self.lookahead.token_value == '(':
             self.fun_declaration_prime(child)
         else:
             self.var_declaration_prime(child)
 
     def var_declaration_prime(self, parent):
         child = Node("Var-declaration-prime", parent=parent)
-        if self.lookahead.token_type == ';':
+        if self.lookahead.token_value == ';':
             self.match(';', child)
-        else:
+        elif self.lookahead.token_value == '[':
             self.match('[', child)
             self.match('NUM', child)
             self.match(']', child)
+            self.match(';', child)
 
     def fun_declaration_prime(self, parent):
         child = Node("Fun-declaration-prime", parent=parent)
@@ -476,151 +477,55 @@ class Parser:
 
     def type_specifier(self, parent):
         child = Node("Type-specifier", parent=parent)
-        if self.lookahead.token_type in ['int', 'void']:
-            self.match(self.lookahead.token_type, child)
+        if self.lookahead.token_value in self.follow['Type-specifier']['First']:
+            self.match(self.lookahead.token_value, child)
 
     def params(self, parent):
         child = Node("Params", parent=parent)
-        if self.lookahead.token_type == 'int':
-            self.match('int', child)
-            self.match('ID', child)
-            self.param_prime(child)
-            self.param_list(child)
-        elif self.lookahead.token_type == 'void':
-            self.match('void', child)
+        if self.lookahead.token_value in ['int', 'void']:
+            self.match(self.lookahead.token_value, child)
+            if self.lookahead.token_value == 'ID':
+                self.match('ID', child)
+                self.param_list(child)
 
     def param_list(self, parent):
         child = Node("Param-list", parent=parent)
-        if self.lookahead.token_type == ',':
+        while self.lookahead.token_value == ',':
             self.match(',', child)
             self.param(child)
-            self.param_list(child)
-        elif 'EPSILON' in rules['Param-list'][1]:
-            return
 
     def param(self, parent):
         child = Node("Param", parent=parent)
         self.declaration_initial(child)
-        self.param_prime(child)
-
-    def param_prime(self, parent):
-        child = Node("Param-prime", parent=parent)
-        if self.lookahead.token_type == '[':
-            self.match('[', child)
-            self.match(']', child)
 
     def compound_stmt(self, parent):
         child = Node("Compound-stmt", parent=parent)
         self.match('{', child)
-        self.declaration_list(child)
+        self.optional_declarations(child)
         self.statement_list(child)
         self.match('}', child)
 
+    def optional_declarations(self, parent):
+        child = Node("Optional-declarations", parent=parent)
+        while self.lookahead.token_value in self.follow['Declaration']['First']:
+            self.declaration(child)
+
     def statement_list(self, parent):
         child = Node("Statement-list", parent=parent)
-        if self.lookahead.token_type in first_and_follow['Statement-list']['First']:
+        while self.lookahead.token_value in self.follow['Statement']['First']:
             self.statement(child)
-            self.statement_list(child)
-        elif 'EPSILON' in rules['Statement-list'][1]:
-            return
-
-    def d(self, parent):
-        child = Node("D", parent=parent)
-        if self.lookahead.token_type in first_and_follow['Addop']['First']:
-            self.match(self.lookahead.token_type, child)  # '+' or '-'
-            self.term(child)
-        elif 'EPSILON' in rules['D'][1]:
-            return
-
-    def term(self, parent):
-        child = Node("Term", parent=parent)
-        self.signed_factor(child)
-        self.g(child)
-
-    def signed_factor(self, parent):
-        child = Node("Signed-factor", parent=parent)
-        if self.lookahead.token_type in ['+', '-']:
-            self.match(self.lookahead.token_type, child)
-        self.factor(child)
-
-    def factor(self, parent):
-        child = Node("Factor", parent=parent)
-        if self.lookahead.token_type == '(':
-            self.match('(', child)
-            self.expression(child)
-            self.match(')', child)
-        elif self.lookahead.token_type == 'ID':
-            self.match('ID', child)
-            self.var_call_prime(child)
-        elif self.lookahead.token_type == 'NUM':
-            self.match('NUM', child)
-
-    def var_call_prime(self, parent):
-        child = Node("Var-call-prime", parent=parent)
-        if self.lookahead.token_type == '(':
-            self.match('(', child)
-            self.args(child)
-            self.match(')', child)
-        elif self.lookahead.token_type == '[':
-            self.match('[', child)
-            self.expression(child)
-            self.match(']', child)
-
-    def g(self, parent):
-        child = Node("G", parent=parent)
-        if self.lookahead.token_type == '*':
-            self.match('*', child)
-            self.signed_factor(child)
-            self.g(child)
-        elif 'EPSILON' in rules['G'][1]:
-            return
-
-    def term_zegond(self, parent):
-        child = Node("Term-zegond", parent=parent)
-        self.signed_factor_zegond(child)
-        self.g(child)
-
-    def signed_factor_zegond(self, parent):
-        child = Node("Signed-factor-zegond", parent=parent)
-        if self.lookahead.token_type in ['+', '-']:
-            self.match(self.lookahead.token_type, child)
-        self.factor_zegond(child)
-
-    def factor_zegond(self, parent):
-        child = Node("Factor-zegond", parent=parent)
-        if self.lookahead.token_type == '(':
-            self.match('(', child)
-            self.expression(child)
-            self.match(')', child)
-        elif self.lookahead.token_type == 'NUM':
-            self.match('NUM', child)
 
     def statement(self, parent):
         child = Node("Statement", parent=parent)
-        if self.lookahead.token_type in first_and_follow['Statement']['First']:
-            if self.lookahead.token_type == 'if':
-                self.selection_stmt(child)
-            elif self.lookahead.token_type == 'for':
-                self.iteration_stmt(child)
-            elif self.lookahead.token_type == 'return':
-                self.return_stmt(child)
-            elif self.lookahead.token_type in first_and_follow['Expression-stmt']['First']:
-                self.expression_stmt(child)
-            elif self.lookahead.token_type == '{':
-                self.compound_stmt(child)
+        # Determine the correct statement type based on lookahead
+        if self.lookahead.token_value == 'if':
+            self.selection_stmt(child)
+        elif self.lookahead.token_value == 'while':
+            self.iteration_stmt(child)
+        elif self.lookahead.token_value == 'return':
+            self.return_stmt(child)
         else:
-            self.error("Invalid statement", child)
-
-    def expression_stmt(self, parent):
-        child = Node("Expression-stmt", parent=parent)
-        if self.lookahead.token_type in ['+', 'ID', 'NUM']:  # Assuming '+' starts an expression
-            self.expression(child)
-            self.match(';', child)
-        elif self.lookahead.token_type == 'break':
-            self.match('break', child)
-            self.match(';', child)
-        else:
-            self.match(';', child)
+            self.expression_stmt(child)
 
     def selection_stmt(self, parent):
         child = Node("Selection-stmt", parent=parent)
@@ -629,25 +534,14 @@ class Parser:
         self.expression(child)
         self.match(')', child)
         self.statement(child)
-        self.else_stmt(child)
-
-    def else_stmt(self, parent):
-        child = Node("Else-stmt", parent=parent)
-        if self.lookahead.token_type == 'else':
+        if self.lookahead.token_value == 'else':
             self.match('else', child)
             self.statement(child)
-            self.match('endif', child)
-        else:
-            self.match('endif', child)
 
     def iteration_stmt(self, parent):
         child = Node("Iteration-stmt", parent=parent)
-        self.match('for', child)
+        self.match('while', child)
         self.match('(', child)
-        self.expression(child)
-        self.match(';', child)
-        self.expression(child)
-        self.match(';', child)
         self.expression(child)
         self.match(')', child)
         self.statement(child)
@@ -655,74 +549,133 @@ class Parser:
     def return_stmt(self, parent):
         child = Node("Return-stmt", parent=parent)
         self.match('return', child)
-        self.return_stmt_prime(child)
-
-    def return_stmt_prime(self, parent):
-        child = Node("Return-stmt-prime", parent=parent)
-        if self.lookahead.token_type == ';':
-            self.match(';', child)
-        else:
+        if self.lookahead.token_value != ';':
             self.expression(child)
-            self.match(';', child)
+        self.match(';', child)
+
+    def expression_stmt(self, parent):
+        child = Node("Expression-stmt", parent=parent)
+        if self.lookahead.token_value != ';':
+            self.expression(child)
+        self.match(';', child)
 
     def expression(self, parent):
         child = Node("Expression", parent=parent)
-        if self.lookahead.token_type == 'ID' and self.scanner.lookahead(1) == '=':
+        # Logic to handle different expressions based on grammar
+        if self.lookahead.token_value == 'ID':
             self.match('ID', child)
+            if self.lookahead.token_value in ['=', '[']:
+                self.assignment_expr(child)
+            elif self.lookahead.token_value == '(':
+                self.function_call(child)
+        else:
+            self.simple_expression(child)
+
+    def assignment_expr(self, parent):
+        child = Node("Assignment-expr", parent=parent)
+        if self.lookahead.token_value == '[':
+            self.match('[', child)
+            self.expression(child)
+            self.match(']', child)
             self.match('=', child)
             self.expression(child)
         else:
-            self.simple_expression_zegond(child)
+            self.match('=', child)
+            self.expression(child)
 
-    def simple_expression_zegond(self, parent):
-        child = Node("Simple-expression-zegond", parent=parent)
-        self.additive_expression_zegond(child)
-        if self.lookahead.token_type in first_and_follow['C']['First']:
-            self.c(child)
-
-    def additive_expression_zegond(self, parent):
-        child = Node("Additive-expression-zegond", parent=parent)
-        self.term_zegond(child)
-        self.d(child)
-
-    def c(self, parent):
-        child = Node("C", parent=parent)
-        if self.lookahead.token_type in first_and_follow['Relop']['First']:
-            self.relop(child)
-            self.additive_expression(child)
+    def function_call(self, parent):
+        child = Node("Function-call", parent=parent)
+        self.match('(', child)
+        self.args(child)
+        self.match(')', child)
 
     def args(self, parent):
         child = Node("Args", parent=parent)
-        if self.lookahead.token_type in first_and_follow['Args']['First']:
-            self.arg_list(child)
-        elif 'EPSILON' in rules['Args'][1]:
-            return
-
-    def arg_list(self, parent):
-        child = Node("Arg-list", parent=parent)
-        self.expression(child)
-        self.arg_list_prime(child)
-
-    def arg_list_prime(self, parent):
-        child = Node("Arg-list-prime", parent=parent)
-        if self.lookahead.token_type == ',':
-            self.match(',', child)
+        if self.lookahead.token_value != ')':
             self.expression(child)
-            self.arg_list_prime(child)
-        elif 'EPSILON' in rules['Arg-list-prime'][1]:
-            return
+            while self.lookahead.token_value == ',':
+                self.match(',', child)
+                self.expression(child)
 
-    def relop(self, parent):
-        child = Node("Relop", parent=parent)
-        if self.lookahead.token_type in ['<', '==']:
-            self.match(self.lookahead.token_type, child)
+    def simple_expression(self, parent):
+        child = Node("Simple-expression", parent=parent)
+        self.additive_expression(child)
+        if self.lookahead.token_value in ['<', '==']:
+            self.relop(child)
+            self.additive_expression(child)
 
     def additive_expression(self, parent):
         child = Node("Additive-expression", parent=parent)
         self.term(child)
-        self.d(child)
+        while self.lookahead.token_value in ['+', '-']:
+            self.addop(child)
+            self.term(child)
+
+    def term(self, parent):
+        child = Node("Term", parent=parent)
+        self.signed_factor(child)
+        while self.lookahead.token_value == '*':
+            self.match('*', child)
+            self.signed_factor(child)
+
+    def signed_factor(self, parent):
+        child = Node("Signed-factor", parent=parent)
+        if self.lookahead.token_value in ['+', '-']:
+            self.match(self.lookahead.token_value, child)
+        self.factor(child)
+
+    def factor(self, parent):
+        child = Node("Factor", parent=parent)
+        if self.lookahead.token_value == '(':
+            self.match('(', child)
+            self.expression(child)
+            self.match(')', child)
+        elif self.lookahead.token_value == 'ID':
+            self.match('ID', child)
+            if self.lookahead.token_value == '[':
+                self.match('[', child)
+                self.expression(child)
+                self.match(']', child)
+
+    def relop(self, parent):
+        """ Parse relational operators """
+        child = Node("Relop", parent=parent)
+        if self.lookahead.token_value in ['<', '==']:
+            self.match(self.lookahead.token_value, child)
+        else:
+            self.error("Expected relational operator", child)
+
+    def addop(self, parent):
+        """ Parse addition operators """
+        child = Node("Addop", parent=parent)
+        if self.lookahead.token_value in ['+', '-']:
+            self.match(self.lookahead.token_value, child)
+        else:
+            self.error("Expected addition operator", child)
+
+    def identifier_expression(self, parent):
+        """ Handle expressions that start with an identifier, which could lead to assignments or function calls """
+        child = Node("Identifier-Expression", parent=parent)
+        self.match('ID', child)
+        if self.lookahead.token_value == '=':
+            self.match('=', child)
+            self.expression(child)
+        elif self.lookahead.token_value == '(':
+            self.function_call(child)
+        elif self.lookahead.token_value == '[':
+            self.array_access(child)
+
+    def array_access(self, parent):
+        child = Node("Array-Access", parent=parent)
+        self.match('[', child)
+        self.expression(child)
+        self.match(']', child)
+        if self.lookahead.token_value == '=':
+            self.match('=', child)
+            self.expression(child)
 
     def output_results(self):
+        """ Output the results to files """
         with open('parse_tree.txt', 'w') as tree_file:
             print(RenderTree(self.root))
             for pre, _, node in RenderTree(self.root):
