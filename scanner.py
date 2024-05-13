@@ -199,6 +199,7 @@ class Scanner:
     states = []
 
     def __init__(self, input_file):
+        setup_states()
         start_state = State.states[0]
         self.reader = Reader(input_file)
         self.start_state: State = start_state
@@ -208,6 +209,12 @@ class Scanner:
         self.symbol_table = SymbolTable()
 
     def get_next_token(self) -> Token:
+        while True:
+            token = self._get_next_token()
+            if token.token_type not in hidden_tokens:
+                return token
+
+    def _get_next_token(self) -> Token:
         token_name = ""
         while not self.current_state.is_final:
             c = self.reader.get_char()
@@ -234,7 +241,7 @@ class Scanner:
         while token.token_type != TokenType.EOF.name:
             self.current_state = self.start_state
             line_number = self.reader.line_number
-            token = self.get_next_token()
+            token = self._get_next_token()
 
             if token.token_type == TokenType.PANIC.name:
                 self.errors.setdefault(line_number, []).append(

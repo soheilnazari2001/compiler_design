@@ -53,35 +53,36 @@ class Parser:
         self.raise_error(f"Missing {missing}")
 
     def parse(self):
-        self.root = self.parse_{{ start }}(None)
+        self.root = self.parse_program(None)
 
     def epsilon(self, parent):
         node = Node(name="epsilon", parent=parent)
         return node
-    {% for name, nonterminal in nonterminals.items() %}
 
-    def parse_{{ name }}(self, parent):
+    def parse_program(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            {% for condition, statements in nonterminal.derivations.items() %}
-            if terminal in {{ condition | to_set }}:
-                {% for statement in statements %}
-                {% if statement.is_terminal %}
-                self.match("{{ statement.value }}")
-                {% else %}
-                self.parse_{{ statement.value }}(node)
-                {%endif%}
-                {% endfor %}
-                return Node(name="{{ nonterminal.node_name }}", parent=parent)
-            {% endfor %}
-            {% if nonterminal.goes_to_epsilon %}
-            if terminal in {{nonterminal.follows | to_set }}:
+            if terminal in {"a", "b"}:
+                self.match("NUM")
+                return Node(name="program", parent=parent)
+            if terminal in {"b", "c"}:
+                self.parse_program(node)
+                return Node(name="program", parent=parent)
+            if terminal in {"d", "e"}:
                 self.epsilon(node)
-                return Node(name="{{ nonterminal.node_name }}", parent=parent)
-            {% else %}
-            if terminal in {{nonterminal.follows | to_set }}:
-                self.raise_missing_error("{{ nonterminal.node_name }}")
+                return Node(name="program", parent=parent)
+            self.raise_unexpected_error("program", terminal)
+
+    def parse_declaration_list(self, parent):
+        while True:
+            terminal = self.lookahead.terminal
+            if terminal in {"b", "c"}:
+                self.parse_declaration_list(node)
+                return Node(name="Declaration-list", parent=parent)
+            if terminal in {"a", "b"}:
+                self.match("NUM")
+                return Node(name="Declaration-list", parent=parent)
+            if terminal in {"a", "b"}:
+                self.raise_missing_error("Declaration-list")
                 return None
-            {% endif %}
-            self.raise_unexpected_error("{{ nonterminal.node_name }}", terminal)
-    {% endfor %}
+            self.raise_unexpected_error("Declaration-list", terminal)
