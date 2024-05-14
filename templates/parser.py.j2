@@ -43,14 +43,14 @@ class Parser:
             self.raise_unexpected_error(expected, self.lookahead.terminal, parent=parent)
 
     def raise_error(self, message):
-        self.errors.append(message)
+        self.errors.append(f"#{self.scanner.reader.line_number} : {message}")
 
     def raise_unexpected_error(self, expected, actual, parent=None):
-        self.raise_error(f"Expected {expected}, but found {actual}")
+        self.raise_error(f"syntax error, illegal {actual}")
         self.next_token()
 
     def raise_missing_error(self, missing, parent=None):
-        self.raise_error(f"Missing {missing}")
+        self.raise_error(f"syntax error, missing {missing}")
 
     def parse(self):
         self.root = self.parse_{{ start }}(None)
