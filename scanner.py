@@ -15,7 +15,6 @@ hidden_tokens = [
     TokenType.WHITESPACE.name,
     TokenType.START.name,
     TokenType.PANIC.name,
-    TokenType.EOF.name,
 ]
 
 
@@ -51,12 +50,12 @@ class Reader:
                 char = self.line[self.char_index]
                 self.char_index += 1
                 return char
-            else:
-                self.line = self.file.readline()
-                if self.line == "":
-                    return None
-                self.line_number += 1
-                self.char_index = 0
+
+            self.line = self.file.readline()
+            if self.line == "":
+                return None
+            self.line_number += 1
+            self.char_index = 0
 
 
 class State:
@@ -215,6 +214,7 @@ class Scanner:
                 return token
 
     def _get_next_token(self) -> Token:
+        self.current_state = self.start_state
         token_name = ""
         while not self.current_state.is_final:
             c = self.reader.get_char()

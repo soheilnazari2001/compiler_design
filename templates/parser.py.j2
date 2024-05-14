@@ -4,84 +4,93 @@ from scanner import Scanner
 
 
 class Node(anytree.Node):
-    def __init__(self, token=None, name=None, parent=None, children=None, **kwargs):
-        if token is not None:
-            name = repr(token)
-        super().__init__(name, parent=parent, children=children, **kwargs)
+    def __init__(self, type=None, value=None, parent=None, children=None, **kwargs):
+        if value is not None:
+            type = f"({type}, {value})"
+        super().__init__(type, parent=parent, children=children, **kwargs)
 
 
 class Parser:
     def __init__(self, input_file):
         self.scanner = Scanner(input_file)
         self.lookahead = None
+        self.errors = []
+        self.root = None
         self.next_token()
-    
+
     def print_tree(self, output_file_path):
-        with open(output_file_path, 'w') as output_file:
-            print(RenderTree(self.root))
+        with open(output_file_path, "w") as output_file:
             for pre, _, node in RenderTree(self.root):
                 output_file.write(f"{pre}{node.name}\n")
-    
+
     def print_errors(self, output_file_path):
-        with open(output_file_path, 'w') as output_file:
+        with open(output_file_path, "w") as output_file:
             if self.errors:
                 for error in self.errors:
-                    output_file.write(error + '\n')
+                    output_file.write(error + "\n")
             else:
                 output_file.write("There is no syntax error.")
 
     def next_token(self):
         self.lookahead = self.scanner.get_next_token()
 
-    def match(self, *args):
-        for expected_token_type in args:
-            if self.lookahead.token_type == expected_token_type:
-                self.next_token()
-            else:
-                self.error(
-                    f"Expected {expected_token_type}, but found {self.lookahead.token_type}"
-                )
+    def match(self, expected, parent=None):
+        if self.lookahead.terminal == expected:
+            child = Node(type=self.lookahead.token_type, value=self.lookahead.token_value, parent=parent)
+            self.next_token()
+            return child
+        else:
+            self.raise_unexpected_error(expected, self.lookahead.terminal, parent=parent)
 
     def raise_error(self, message):
-        raise Exception(f"Syntax error: {message}")
+        self.errors.append(message)
 
-    def raise_unexpected_error(self, expected, actual):
+    def raise_unexpected_error(self, expected, actual, parent=None):
         self.raise_error(f"Expected {expected}, but found {actual}")
         self.next_token()
 
-    def raise_missing_error(self, missing):
+    def raise_missing_error(self, missing, parent=None):
         self.raise_error(f"Missing {missing}")
 
     def parse(self):
         self.root = self.parse_{{ start }}(None)
 
     def epsilon(self, parent):
-        node = Node(name="epsilon", parent=parent)
+        node = Node("epsilon", parent=parent)
         return node
     {% for name, nonterminal in nonterminals.items() %}
 
     def parse_{{ name }}(self, parent):
         while True:
             terminal = self.lookahead.terminal
+            print("inside " + "{{ name }}" + " and seeing " + terminal)
             {% for condition, statements in nonterminal.derivations.items() %}
             if terminal in {{ condition | to_set }}:
+                node = Node("{{ nonterminal.node_name }}", parent=parent)
                 {% for statement in statements %}
                 {% if statement.is_terminal %}
-                self.match("{{ statement.value }}")
+                self.match("{{ statement.value }}", parent=node)
                 {% else %}
                 self.parse_{{ statement.value }}(node)
-                {%endif%}
+                {% endif %}
                 {% endfor %}
-                return Node(name="{{ nonterminal.node_name }}", parent=parent)
+                {% if name == start %}
+                Node("$", parent=node)
+                {% endif %}
+                return node
             {% endfor %}
             {% if nonterminal.goes_to_epsilon %}
-            if terminal in {{nonterminal.follows | to_set }}:
+            if terminal in {{ nonterminal.follows | to_set }}:
+                node = Node("{{ nonterminal.node_name }}", parent=parent)
                 self.epsilon(node)
-                return Node(name="{{ nonterminal.node_name }}", parent=parent)
+                {% if name == start %}
+                Node("$", parent=node)
+                {% endif %}
+                return node
             {% else %}
-            if terminal in {{nonterminal.follows | to_set }}:
-                self.raise_missing_error("{{ nonterminal.node_name }}")
+            if terminal in {{ nonterminal.follows | to_set }}:
+                self.raise_missing_error("{{ nonterminal.node_name }}", parent=parent)
                 return None
             {% endif %}
-            self.raise_unexpected_error("{{ nonterminal.node_name }}", terminal)
+            self.raise_unexpected_error("{{ nonterminal.node_name }}", terminal, parent=parent)
     {% endfor %}

@@ -10,7 +10,7 @@ class TokenType(Enum):
     WHITESPACE = auto()
     START = auto()
     PANIC = auto()
-    EOF = auto()
+    EOF = "$"
 
 
 class Token:
