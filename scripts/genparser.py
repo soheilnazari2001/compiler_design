@@ -544,7 +544,7 @@ PREDICTIVE_SET = {
         "Factor",
         False,
         {
-            ("(",): ["[", "expression", "]"],
+            ("(",): ["(", "expression", ")"],
             ("NUM",): ["NUM"],
             ("ID",): ["ID", "var_call_prime"],
         },
@@ -559,7 +559,7 @@ PREDICTIVE_SET = {
     ),
     "var_prime": Nonterminal("Var-prime", True, {("[",): ["[", "expression", "]"]}),
     "factor_prime": Nonterminal("Factor-prime", True, {("(",): ["(", "args", ")"]}),
-    "factor_zegond": Nonterminal("Factor-zegond", False, {("NUM", "("): ["NUM"]}),
+    "factor_zegond": Nonterminal("Factor-zegond", False, {("NUM",): ["NUM"], ("(",): ["(", "expression", ")"]}),
     "args": Nonterminal("Args", True, {("ID", "NUM", "(", "+", "-"): ["arg_list"]}),
     "arg_list": Nonterminal(
         "Arg-list",

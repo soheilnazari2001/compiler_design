@@ -19,17 +19,14 @@ class Parser:
         self.next_token()
 
     def print_tree(self, output_file_path):
+        tree = "\n".join(f"{pre}{node.name}" for pre, _, node in RenderTree(self.root))
         with open(output_file_path, "w") as output_file:
-            for pre, _, node in RenderTree(self.root):
-                output_file.write(f"{pre}{node.name}\n")
+            output_file.write(tree)
 
     def print_errors(self, output_file_path):
+        errors = "\n".join(self.errors) if self.errors else "There is no syntax error."
         with open(output_file_path, "w") as output_file:
-            if self.errors:
-                for error in self.errors:
-                    output_file.write(error + "\n")
-            else:
-                output_file.write("There is no syntax error.")
+            output_file.write(errors)
 
     def next_token(self):
         self.lookahead = self.scanner.get_next_token()
@@ -40,12 +37,12 @@ class Parser:
             self.next_token()
             return child
         else:
-            self.raise_unexpected_error(expected, self.lookahead.terminal, parent=parent)
+            self.raise_illegal_error(expected, self.lookahead.terminal, parent=parent)
 
     def raise_error(self, message):
         self.errors.append(f"#{self.scanner.reader.line_number} : {message}")
 
-    def raise_unexpected_error(self, expected, actual, parent=None):
+    def raise_illegal_error(self, expected, actual, parent=None):
         self.raise_error(f"syntax error, illegal {actual}")
         self.next_token()
 
@@ -63,7 +60,6 @@ class Parser:
     def parse_{{ name }}(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside " + "{{ name }}" + " and seeing " + terminal)
             {% for condition, statements in nonterminal.derivations.items() %}
             if terminal in {{ condition | to_set }}:
                 node = Node("{{ nonterminal.node_name }}", parent=parent)
@@ -92,5 +88,5 @@ class Parser:
                 self.raise_missing_error("{{ nonterminal.node_name }}", parent=parent)
                 return None
             {% endif %}
-            self.raise_unexpected_error("{{ nonterminal.node_name }}", terminal, parent=parent)
+            self.raise_illegal_error("{{ nonterminal.node_name }}", terminal, parent=parent)
     {% endfor %}
