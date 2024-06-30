@@ -22,21 +22,6 @@ def line_number_str(line_number):
     return f"{str(line_number) + '.':<7}"
 
 
-class SymbolTable:
-    def __init__(self):
-        self.symbols = {key: None for key in keywords}
-
-    def add_symbol(self, symbol):
-        if symbol not in self.symbols:
-            self.symbols[symbol] = None
-
-    def __str__(self):
-        s = ""
-        for i, symbol in enumerate(self.symbols):
-            s += f"{line_number_str(i + 1)}{symbol}\n"
-        return s
-
-
 class Reader:
     def __init__(self, file):
         self.file = file
@@ -205,7 +190,6 @@ class Scanner:
         self.current_state: State = start_state
         self.tokens = {}
         self.errors = {}
-        self.symbol_table = SymbolTable()
 
     def get_next_token(self) -> Token:
         while True:
@@ -228,7 +212,6 @@ class Scanner:
                 token_name += c
 
         if self.current_state.state_type == TokenType.ID.name:
-            self.symbol_table.add_symbol(token_name)
             if token_name in keywords:
                 return Token(TokenType.KEYWORD.name, token_name)
         elif self.current_state.state_type == TokenType.PANIC.name:
