@@ -96,15 +96,28 @@ class RuntimeStack:
 
     def push(self, data):
         self.codegen.add_instructions(
-            Instruction.sub(self.codegen.stack_pointer_address, f"#{self.codegen.WORD_SIZE}", self.codegen.stack_pointer_address),
+            Instruction.sub(
+                self.codegen.stack_pointer_address,
+                f"#{self.codegen.WORD_SIZE}",
+                self.codegen.stack_pointer_address,
+            ),
             Instruction.assign(data, f"@{self.codegen.stack_pointer_address}"),
         )
 
     def pop(self, address):
         self.codegen.add_instructions(
             Instruction.assign(f"@{self.codegen.stack_pointer_address}", address),
-            Instruction.add(self.codegen.stack_pointer_address, f"#{self.codegen.WORD_SIZE}", self.codegen.stack_pointer_address),
+            Instruction.add(
+                self.codegen.stack_pointer_address,
+                f"#{self.codegen.WORD_SIZE}",
+                self.codegen.stack_pointer_address,
+            ),
         )
+
+
+class Actor:
+    def __init__(self, code_generator):
+        self.code_generator = code_generator
 
 
 class CodeGenerator:
@@ -112,21 +125,25 @@ class CodeGenerator:
 
     def __init__(self, parser: Parser):
         self.parser = parser
+        self.runtime_stack = RuntimeStack(self)
+        self.scope_stack = ScopeStack(self)
+        self.actor = Actor(self)
         self.semantic_stack = []
         self.instruction_index = 0
         self.instructions: OrderedDict[int, Instruction] = OrderedDict()
         self.data_address = 20000
         self.temp_address = 60000
-        self.stack_start_address = self.temp_address - WORD_SIZE
+        self.stack_start_address = self.temp_address - self.WORD_SIZE
         self.return_address_address = self.get_next_data_address()
         self.return_value_address = self.get_next_data_address()
         self.stack_pointer_address = self.get_next_data_address()
-        initialization_instructions = (
-            Instruction.assign(f"#{self.stack_start_address}", f"@{self.stack_pointer_address}"),
+        self.add_instructions(
+            Instruction.assign(
+                f"#{self.stack_start_address}", f"@{self.stack_pointer_address}"
+            ),
             Instruction.assign("#0", f"@{self.return_address_address}"),
             Instruction.assign("#0", f"@{self.return_value_address}"),
         )
-        self.add_instructions(*initialization_instructions)
 
     def add_instruction(self, instruction, index=None):
         if index is None:
@@ -150,7 +167,10 @@ class CodeGenerator:
         return next_temp_address
 
     def generate_implicit_output(self):
+        pass  # TODO
 
+    def do_action(self, identifier, previous_token, current_token):
+        getattr(self.actor, identifier)(previous_token, current_token)
 
     def action_pnext(self):
         self.semantic_stack.append(self.parser.lookahead.token_value)
