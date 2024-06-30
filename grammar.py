@@ -359,12 +359,12 @@ PREDICTIVE_SET = {
         {("int", "void"): ["declaration_initial", "declaration_prime"]},
     ),
     "declaration_initial": Nonterminal(
-        "Declaration-initial", False, {("int", "void"): ["type_specifier", "#pid", "ID"]}
+        "Declaration-initial", False, {("int", "void"): ["type_specifier", "#pnext", "ID"]}
     ),
     "declaration_prime": Nonterminal(
         "Declaration-prime",
         False,
-        {(";", "["): ["var_declaration_prime"], ("(",): ["fun_declaration_prime"]},
+        {(";", "["): ["var_declaration_prime", "#pvar"], ("(",): ["fun_declaration_prime"]},
     ),
     "var_declaration_prime": Nonterminal(
         "Var-declaration-prime", False, {(";",): [";"], ("["): ["[", "NUM", "]", ";"]}
