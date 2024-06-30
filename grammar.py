@@ -1,6 +1,46 @@
-import click
+from enum import Enum, auto
 
-from jinja2 import Environment
+
+class StatementType(Enum):
+    TERMINAL = auto()
+    NONTERMINAL = auto()
+    CODEGEN = auto()
+
+    @classmethod
+    def from_value(cls, value):
+        match value:
+            case value if value.startswith("#"):
+                return cls.CODEGEN
+            case value if value in NONTERMINALS:
+                return cls.NONTERMINAL
+            case _:
+                return cls.TERMINAL
+
+
+class Statement:
+    def __init__(self, type, value):
+        self.type = type
+        self.value = value
+
+    @classmethod
+    def from_value(cls, value):
+        return cls(StatementType.from_value(value), value)
+
+    @classmethod
+    def from_values(cls, values):
+        return [Statement.from_value(value) for value in values]
+
+
+class Nonterminal:
+    def __init__(self, node_name, goes_to_epsilon, derivations):
+        self.node_name = node_name
+        self.goes_to_epsilon = goes_to_epsilon
+        self.follows = []
+        self.derivations = {
+            condition: Statement.from_values(values)
+            for condition, values in derivations.items()
+        }
+
 
 NONTERMINALS = {
     "s",
@@ -53,32 +93,6 @@ NONTERMINALS = {
     "arg_list",
     "arg_list_prime",
 }
-
-
-class Statement:
-    def __init__(self, is_terminal, value):
-        self.is_terminal = is_terminal
-        self.value = value
-
-    @classmethod
-    def from_value(cls, value):
-        return cls(value not in NONTERMINALS, value)
-
-    @classmethod
-    def from_values(cls, values):
-        return [Statement.from_value(value) for value in values]
-
-
-class Nonterminal:
-    def __init__(self, node_name, goes_to_epsilon, derivations):
-        self.node_name = node_name
-        self.goes_to_epsilon = goes_to_epsilon
-        self.follows = []
-        self.derivations = {
-            condition: Statement.from_values(values)
-            for condition, values in derivations.items()
-        }
-
 
 FOLLOW = {
     "program": ["EOF"],
@@ -332,7 +346,6 @@ FOLLOW = {
     "arg_list_prime": [")"],
 }
 
-
 PREDICTIVE_SET = {
     "program": Nonterminal(
         "Program", False, {("EOF", "int", "void"): ["declaration_list"]}
@@ -346,7 +359,7 @@ PREDICTIVE_SET = {
         {("int", "void"): ["declaration_initial", "declaration_prime"]},
     ),
     "declaration_initial": Nonterminal(
-        "Declaration-initial", False, {("int", "void"): ["type_specifier", "ID"]}
+        "Declaration-initial", False, {("int", "void"): ["type_specifier", "#pid", "ID"]}
     ),
     "declaration_prime": Nonterminal(
         "Declaration-prime",
@@ -559,7 +572,9 @@ PREDICTIVE_SET = {
     ),
     "var_prime": Nonterminal("Var-prime", True, {("[",): ["[", "expression", "]"]}),
     "factor_prime": Nonterminal("Factor-prime", True, {("(",): ["(", "args", ")"]}),
-    "factor_zegond": Nonterminal("Factor-zegond", False, {("NUM",): ["NUM"], ("(",): ["(", "expression", ")"]}),
+    "factor_zegond": Nonterminal(
+        "Factor-zegond", False, {("NUM",): ["NUM"], ("(",): ["(", "expression", ")"]}
+    ),
     "args": Nonterminal("Args", True, {("ID", "NUM", "(", "+", "-"): ["arg_list"]}),
     "arg_list": Nonterminal(
         "Arg-list",
@@ -570,51 +585,3 @@ PREDICTIVE_SET = {
         "Arg-list-prime", True, {(",",): [",", "expression", "arg_list_prime"]}
     ),
 }
-
-
-class Filters:
-    @classmethod
-    def add_filters(cls, environment, *filters):
-        for filter in filters:
-            environment.filters[filter] = getattr(cls, filter)
-
-    @staticmethod
-    def to_set(value):
-        return "{" + ", ".join(f'"{item}"' for item in value) + "}"
-
-
-def get_context():
-    for name, nonterminal in PREDICTIVE_SET.items():
-        nonterminal.follows = FOLLOW[name]
-
-    return {"start": "program", "nonterminals": PREDICTIVE_SET}
-
-
-@click.command()
-@click.option(
-    "--out",
-    "-o",
-    default="parser.py",
-    show_default=True,
-    type=click.File("w"),
-    help="Path of the parser file to generate.",
-)
-@click.option(
-    "--template",
-    "-t",
-    default="templates/parser.py.j2",
-    show_default=True,
-    type=click.File("r"),
-    help="Path of the template file to generate parser from.",
-)
-def generate_parser(out, template):
-    environment = Environment(trim_blocks=True, lstrip_blocks=True)
-    Filters.add_filters(environment, "to_set")
-    template = environment.from_string(template.read())
-    context = get_context()
-    parser = template.render(context)
-    out.write(parser)
-
-
-if __name__ == "__main__":
-    generate_parser()

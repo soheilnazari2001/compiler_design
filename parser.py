@@ -1,5 +1,6 @@
 import anytree
 from anytree import RenderTree
+from codegen import CodeGenerator
 from scanner import Scanner
 
 
@@ -18,16 +19,17 @@ class UnexpectedEOFException(Exception):
 class Parser:
     def __init__(self, input_file):
         self.scanner = Scanner(input_file)
+        self.code_generator = CodeGenerator([])
         self.lookahead = None
         self.errors = []
         self.root = None
         self._terminal_to_node_map = {"EOF": "$"}
         self.next_token()
-    
+
     def get_node_name_from_token(self, token):
         if token.terminal in self._terminal_to_node_map:
             return self._terminal_to_node_map[token.terminal]
-        
+
         return f"({token.token_type}, {token.token_value})"
 
     def print_tree(self, output_file_path):
@@ -49,7 +51,7 @@ class Parser:
             child = Node(node_name, parent=parent)
             self.next_token()
             return child
-        
+
         if self.lookahead.terminal == "EOF":
             self.raise_eof_error()
             return
@@ -66,7 +68,7 @@ class Parser:
 
     def raise_missing_error(self, missing, parent=None):
         self.raise_error(f"missing {missing}")
-    
+
     def raise_eof_error(self):
         self.scanner.reader.line_number += 1
         self.raise_error("Unexpected EOF")
@@ -141,6 +143,7 @@ class Parser:
             if terminal in {"int", "void"}:
                 node = Node("Declaration-initial", parent=parent)
                 self.parse_type_specifier(node)
+                self.code_generator.action_pid()
                 self.match("ID", parent=node)
                 return node
             if terminal in {";", "[", "(", ")", ","}:
