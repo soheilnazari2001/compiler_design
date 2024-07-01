@@ -255,9 +255,14 @@ class Actor:
             else:
                 if symbol.is_array:
                     if current_token.lexeme != "[" and not self.argument_counts:
-                        self.codegen.raise_operand_type_mismatch_semantic_error(
-                            SymbolType.INT.value, SymbolType.ARRAY.value
-                        )
+                        if current_token.lexeme in self.INSTRUCTION_FROM_OPERATION:
+                            self.codegen.raise_operand_type_mismatch_semantic_error(
+                                SymbolType.ARRAY.value, SymbolType.INT.value
+                            )
+                        else:
+                            self.codegen.raise_operand_type_mismatch_semantic_error(
+                                SymbolType.INT.value, SymbolType.ARRAY.value
+                            )
 
     def handle_arg_mismatch(self, current_token, previous_token):
         if len(self.argument_counts) > 0:
