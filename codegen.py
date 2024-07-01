@@ -495,7 +495,7 @@ class Actor:
         self.codegen.function_temp_start_pointer = self.codegen.temp_address
 
     def call(self, previous_token, current_token):
-        self.store_data_and_temp()
+        self.store_execution_flow()
         self.codegen.push_addresses()
 
         arg_count = self.argument_counts.pop()
@@ -504,7 +504,7 @@ class Actor:
         self.make_call(arg_count)
 
         self.codegen.pop_addresses()
-        self.restore_data_and_temp()
+        self.restore_execution_flow()
 
         self.retrieve_return_value()
 
@@ -520,7 +520,7 @@ class Actor:
             Instruction.assign(self.codegen.return_value_address, temp)
         )
 
-    def restore_data_and_temp(self):
+    def restore_execution_flow(self):
         for address in range(
             self.codegen.temp_address,
             self.codegen.function_temp_start_pointer,
@@ -546,7 +546,7 @@ class Actor:
         instruction = Instruction.jp(address)
         self.codegen.add_instruction(instruction)
 
-    def store_data_and_temp(self):
+    def store_execution_flow(self):
         for address in range(
             self.codegen.function_data_start_pointer,
             self.codegen.data_address,
