@@ -504,6 +504,7 @@ class Actor:
         self.codegen.function_temp_start_pointer = self.codegen.temp_address
 
     def call(self, previous_token, current_token):
+        print(self.codegen.semantic_stack)
         self.store_execution_flow()
         self.codegen.push_addresses()
 
@@ -679,8 +680,8 @@ class CodeGenerator:
         self.instruction_index = 0
         self.instructions: dict[int, Instruction] = {}
         self.semantic_errors_list: list[str] = []
-        self.data_address = 200000
-        self.temp_address = 600000
+        self.data_address = 100000
+        self.temp_address = 500000
         self.stack_start_address = self.temp_address - self.WORD_SIZE
         self.return_address_address = self.get_next_data_address()
         self.return_value_address = self.get_next_data_address()
