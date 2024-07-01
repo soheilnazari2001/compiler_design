@@ -359,38 +359,99 @@ PREDICTIVE_SET = {
         {("int", "void"): ["declaration_initial", "declaration_prime"]},
     ),
     "declaration_initial": Nonterminal(
-        "Declaration-initial", False, {("int", "void"): ["type_specifier", "#pnext", "ID"]}
+        "Declaration-initial",
+        False,
+        {
+            ("int", "void"): [
+                "type_specifier",
+                "#save_type",
+                "#set_force_declaration_flag",
+                "ID",
+                "#start_no_push",
+                "#pid",
+                "#end_no_push",
+                "#unset_force_declaration_flag",
+            ]
+        },
     ),
     "declaration_prime": Nonterminal(
         "Declaration-prime",
         False,
-        {(";", "["): ["var_declaration_prime", "#pvar"], ("(",): ["fun_declaration_prime"]},
+        {
+            (";", "["): [
+                "var_declaration_prime",
+                "#zero_initialize",
+                "#void_check_throw",
+            ],
+            ("(",): ["fun_declaration_prime"],
+        },
     ),
     "var_declaration_prime": Nonterminal(
-        "Var-declaration-prime", False, {(";",): [";"], ("["): ["[", "NUM", "]", ";"]}
+        "Var-declaration-prime",
+        False,
+        {(";",): [";"], ("["): ["[", "NUM", "#pnum", "]", "#declare_array", ";"]},
     ),
     "fun_declaration_prime": Nonterminal(
-        "Fun-declaration-prime", False, {("(",): ["(", "params", ")", "compound_stmt"]}
+        "Fun-declaration-prime",
+        False,
+        {
+            ("(",): [
+                "(",
+                "#declare_function",
+                "#open_scope",
+                "#set_function_scope_flag",
+                "params",
+                ")",
+                "compound_stmt",
+                "#jump_back",
+            ]
+        },
     ),
     "type_specifier": Nonterminal(
-        "Type-specifier", False, {("void",): ["void"], ("int",): ["int"]}
+        "Type-specifier", False, {("void",): ["void", "#void_check"], ("int",): ["int"]}
     ),
     "params": Nonterminal(
         "Params",
         False,
-        {("void",): ["void"], ("int",): ["int", "ID", "param_prime", "param_list"]},
+        {
+            ("void",): ["void"],
+            ("int",): [
+                "int",
+                "#save_type",
+                "#set_force_declaration_flag",
+                "ID",
+                "#pid",
+                "#unset_force_declaration_flag",
+                "param_prime",
+                "#pop_param",
+                "param_list",
+            ],
+        },
     ),
     "param_list": Nonterminal(
         "Param-list", True, {(",",): [",", "param", "param_list"]}
     ),
     "param": Nonterminal(
-        "Param", False, {("int", "void"): ["declaration_initial", "param_prime"]}
+        "Param",
+        False,
+        {("int", "void"): ["declaration_initial", "param_prime", "#pop_param"]},
     ),
-    "param_prime": Nonterminal("Param-prime", True, {("["): ["[", "]"]}),
+    "param_prime": Nonterminal(
+        "Param-prime", True, {("["): ["[", "]", "#array_param"]}
+    ),
     "compound_stmt": Nonterminal(
         "Compound-stmt",
         False,
-        {("{",): ["{", "declaration_list", "statement_list", "}"]},
+        {
+            ("{",): [
+                "#open_scope",
+                "{",
+                "declaration_list",
+                "statement_list",
+                "#close_scope",
+                "}",
+            ]
+        },
     ),
     "statement_list": Nonterminal(
         "Statement-list",
@@ -417,20 +478,41 @@ PREDICTIVE_SET = {
         "Expression-stmt",
         False,
         {
-            ("ID", "NUM", "(", "+", "-"): ["expression", ";"],
+            ("ID", "NUM", "(", "+", "-"): ["expression", "#pop", ";"],
             (";",): [";"],
-            ("break",): ["break", ";"],
+            ("break",): ["break", "#break", ";"],
         },
     ),
     "selection_stmt": Nonterminal(
         "Selection-stmt",
         False,
-        {("if",): ["if", "(", "expression", ")", "statement", "else_stmt"]},
+        {
+            ("if",): [
+                "if",
+                "(",
+                "#start_rhs",
+                "expression",
+                "#end_rhs",
+                ")",
+                "#save",
+                "statement",
+                "else_stmt",
+            ]
+        },
     ),
     "else_stmt": Nonterminal(
         "Else-stmt",
         False,
-        {("endif",): ["endif"], ("else",): ["else", "statement", "endif"]},
+        {
+            ("endif",): ["endif", "#jpf_from_saved"],
+            ("else",): [
+                "else",
+                "#save_and_jpf_from_last_save",
+                "statement",
+                "endif",
+                "#jp_from_saved",
+            ],
+        },
     ),
     "iteration_stmt": Nonterminal(
         "Iteration-stmt",
@@ -439,6 +521,7 @@ PREDICTIVE_SET = {
             ("for",): [
                 "for",
                 "(",
+                "#start_rhs",
                 "expression",
                 ";",
                 "expression",
@@ -450,17 +533,40 @@ PREDICTIVE_SET = {
         },
     ),
     "return_stmt": Nonterminal(
-        "Return-stmt", False, {("return",): ["return", "return_stmt_prime"]}
+        "Return-stmt",
+        False,
+        {
+            ("return",): [
+                "return",
+                "#start_rhs",
+                "return_stmt_prime",
+                "#end_rhs",
+                "#jump_back",
+            ]
+        },
     ),
     "return_stmt_prime": Nonterminal(
         "Return-stmt-prime",
         False,
-        {("ID", "+", "-", "(", "NUM"): ["expression", ";"], (";",): [";"]},
+        {
+            ("ID", "+", "-", "(", "NUM"): ["expression", "#set_return_value", ";"],
+            (";",): [";"],
+        },
     ),
     "expression": Nonterminal(
         "Expression",
         False,
-        {("ID",): ["ID", "b"], ("NUM", "(", "+", "-"): ["simple_expression_zegond"]},
+        {
+            ("ID",): [
+                "ID",
+                "#check_declaration",
+                "#pid",
+                "#uncheck_declaration",
+                "#check_type",
+                "b",
+            ],
+            ("NUM", "(", "+", "-"): ["simple_expression_zegond"],
+        },
     ),
     "b": Nonterminal(
         "B",
@@ -469,8 +575,8 @@ PREDICTIVE_SET = {
             (";", "]", "(", ")", ",", "<", "==", "+", "-", "*"): [
                 "simple_expression_prime"
             ],
-            ("[",): ["[", "expression", "]", "h"],
-            ("=",): ["=", "expression"],
+            ("[",): ["[", "#start_rhs", "expression", "#end_rhs", "]", "#array", "h"],
+            ("=",): ["=", "#start_rhs", "expression", "#assign", "#end_rhs"],
         },
     ),
     "h": Nonterminal(
@@ -478,7 +584,7 @@ PREDICTIVE_SET = {
         False,
         {
             (";", "]", ")", ",", "<", "==", "+", "-", "*"): ["g", "d", "c"],
-            ("=",): ["=", "expression"],
+            ("=",): ["=", "#start_rhs", "expression", "#assign", "#end_rhs"],
         },
     ),
     "simple_expression_zegond": Nonterminal(
@@ -496,8 +602,14 @@ PREDICTIVE_SET = {
             ],
         },
     ),
-    "c": Nonterminal("C", True, {("<", "=="): ["relop", "additive_expression"]}),
-    "relop": Nonterminal("Relop", False, {("<",): ["<"], ("==",): ["=="]}),
+    "c": Nonterminal(
+        "C", True, {("<", "=="): ["relop", "additive_expression", "#execute"]}
+    ),
+    "relop": Nonterminal(
+        "Relop",
+        False,
+        {("<",): ["<", "#push_operation"], ("==",): ["==", "#push_operation"]},
+    ),
     "additive_expression": Nonterminal(
         "Additive-expression", False, {("ID", "NUM", "(", "+", "-"): ["term", "d"]}
     ),
@@ -511,8 +623,12 @@ PREDICTIVE_SET = {
         False,
         {("NUM", "(", "+", "-"): ["term_zegond", "d"]},
     ),
-    "d": Nonterminal("D", True, {("+", "-"): ["addop", "term", "d"]}),
-    "addop": Nonterminal("Addop", False, {("+"): ["+"], ("-"): ["-"]}),
+    "d": Nonterminal("D", True, {("+", "-"): ["addop", "term", "#execute", "d"]}),
+    "addop": Nonterminal(
+        "Addop",
+        False,
+        {("+"): ["+", "#push_operation"], ("-"): ["-", "#push_operation"]},
+    ),
     "term": Nonterminal(
         "Term", False, {("+", "-", "(", "ID", "NUM"): ["signed_factor", "g"]}
     ),
@@ -529,14 +645,16 @@ PREDICTIVE_SET = {
     "term_zegond": Nonterminal(
         "Term-zegond", False, {("+", "-", "(", "NUM"): ["signed_factor_zegond", "g"]}
     ),
-    "g": Nonterminal("G", True, {("*",): ["*", "signed_factor", "g"]}),
+    "g": Nonterminal(
+        "G", True, {("*",): ["*", "#push_operation", "signed_factor", "#execute", "g"]}
+    ),
     "signed_factor": Nonterminal(
         "Signed-factor",
         False,
         {
             ("NUM", "(", "ID"): ["factor"],
             ("+",): ["+", "factor"],
-            ("-",): ["-", "factor"],
+            ("-",): ["-", "factor", "#negate"],
         },
     ),
     "signed_factor_prime": Nonterminal(
@@ -550,38 +668,81 @@ PREDICTIVE_SET = {
         {
             ("NUM", "("): ["factor_zegond"],
             ("+",): ["+", "factor"],
-            ("-",): ["-", "factor"],
+            ("-",): ["-", "factor", "#negate"],
         },
     ),
     "factor": Nonterminal(
         "Factor",
         False,
         {
-            ("(",): ["(", "expression", ")"],
-            ("NUM",): ["NUM"],
-            ("ID",): ["ID", "var_call_prime"],
+            ("(",): ["(", "#start_rhs", "expression", "#end_rhs", ")"],
+            ("NUM",): ["NUM", "#pnum"],
+            ("ID",): [
+                "ID",
+                "#check_declaration",
+                "#pid",
+                "#uncheck_declaration",
+                "var_call_prime",
+            ],
         },
     ),
     "var_call_prime": Nonterminal(
         "Var-call-prime",
         False,
         {
-            ("(",): ["(", "args", ")"],
+            ("(",): [
+                "(",
+                "#start_argument_list",
+                "args",
+                "#end_argument_list",
+                ")",
+                "#call",
+            ],
             (";", ")", "+", "-", "<", "==", "*", "]", ",", "["): ["var_prime"],
         },
     ),
-    "var_prime": Nonterminal("Var-prime", True, {("[",): ["[", "expression", "]"]}),
-    "factor_prime": Nonterminal("Factor-prime", True, {("(",): ["(", "args", ")"]}),
+    "var_prime": Nonterminal(
+        "Var-prime",
+        True,
+        {("[",): ["[", "#start_rhs", "expression", "#end_rhs", "]", "#array"]},
+    ),
+    "factor_prime": Nonterminal(
+        "Factor-prime",
+        True,
+        {
+            ("(",): [
+                "(",
+                "#start_argument_list",
+                "args",
+                "#end_argument_list",
+                ")",
+                "#call",
+            ]
+        },
+    ),
     "factor_zegond": Nonterminal(
-        "Factor-zegond", False, {("NUM",): ["NUM"], ("(",): ["(", "expression", ")"]}
+        "Factor-zegond",
+        False,
+        {
+            ("NUM",): ["NUM", "#pnum"],
+            ("(",): ["(", "#start_rhs", "expression", "#end_rhs", ")"],
+        },
     ),
     "args": Nonterminal("Args", True, {("ID", "NUM", "(", "+", "-"): ["arg_list"]}),
     "arg_list": Nonterminal(
         "Arg-list",
         False,
-        {("ID", "NUM", "(", "+", "-"): ["expression", "arg_list_prime"]},
+        {
+            ("ID", "NUM", "(", "+", "-"): [
+                "expression",
+                "#add_argument_count",
+                "arg_list_prime",
+            ]
+        },
     ),
     "arg_list_prime": Nonterminal(
-        "Arg-list-prime", True, {(",",): [",", "expression", "arg_list_prime"]}
+        "Arg-list-prime",
+        True,
+        {(",",): [",", "expression", "#add_argument_count", "arg_list_prime"]},
     ),
 }

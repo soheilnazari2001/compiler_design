@@ -21,6 +21,7 @@ class Parser:
         self.scanner = Scanner(input_file)
         self.code_generator = CodeGenerator([])
         self.lookahead = None
+        self.previous_lookahead = None
         self.errors = []
         self.root = None
         self._terminal_to_node_map = {"EOF": "$"}
@@ -30,7 +31,7 @@ class Parser:
         if token.terminal in self._terminal_to_node_map:
             return self._terminal_to_node_map[token.terminal]
 
-        return f"({token.token_type}, {token.token_value})"
+        return f"({token.type}, {token.lexeme})"
 
     def print_tree(self, output_file_path):
         tree = "\n".join(f"{pre}{node.name}" for pre, _, node in RenderTree(self.root))
@@ -42,7 +43,18 @@ class Parser:
         with open(output_file_path, "w") as output_file:
             output_file.write(errors)
 
+    def print_generated_code(self, output_file_path):
+        generated_code = self.code_generator.generated_code
+        with open(output_file_path, "w") as output_file:
+            output_file.write(generated_code)
+    
+    def print_semantic_errors(self, output_file_path):
+        semantic_errors = self.code_generator.semantic_errors
+        with open(output_file_path, "w") as output_file:
+            output_file.write(semantic_errors)
+
     def next_token(self):
+        self.previous_lookahead = self.lookahead
         self.lookahead = self.scanner.get_next_token()
 
     def match(self, expected, parent=None):
@@ -87,7 +99,6 @@ class Parser:
     def parse_program(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside program and seeing", terminal)
             if terminal in {"EOF", "int", "void"}:
                 self.root = node = Node("Program", parent=parent)
                 self.parse_declaration_list(node)
@@ -104,7 +115,6 @@ class Parser:
     def parse_declaration_list(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside declaration_list and seeing", terminal)
             if terminal in {"int", "void"}:
                 node = Node("Declaration-list", parent=parent)
                 self.parse_declaration(node)
@@ -122,7 +132,6 @@ class Parser:
     def parse_declaration(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside declaration and seeing", terminal)
             if terminal in {"int", "void"}:
                 node = Node("Declaration", parent=parent)
                 self.parse_declaration_initial(node)
@@ -139,12 +148,16 @@ class Parser:
     def parse_declaration_initial(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside declaration_initial and seeing", terminal)
             if terminal in {"int", "void"}:
                 node = Node("Declaration-initial", parent=parent)
                 self.parse_type_specifier(node)
-                self.code_generator.action_pid()
+                self.code_generator.do_action("#save_type", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#set_force_declaration_flag", self.previous_lookahead, self.lookahead)
                 self.match("ID", parent=node)
+                self.code_generator.do_action("#start_no_push", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#pid", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#end_no_push", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#unset_force_declaration_flag", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "[", "(", ")", ","}:
                 self.raise_missing_error("Declaration-initial", parent=parent)
@@ -157,10 +170,11 @@ class Parser:
     def parse_declaration_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside declaration_prime and seeing", terminal)
             if terminal in {";", "["}:
                 node = Node("Declaration-prime", parent=parent)
                 self.parse_var_declaration_prime(node)
+                self.code_generator.do_action("#zero_initialize", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#void_check_throw", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"("}:
                 node = Node("Declaration-prime", parent=parent)
@@ -177,7 +191,6 @@ class Parser:
     def parse_var_declaration_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside var_declaration_prime and seeing", terminal)
             if terminal in {";"}:
                 node = Node("Var-declaration-prime", parent=parent)
                 self.match(";", parent=node)
@@ -186,7 +199,9 @@ class Parser:
                 node = Node("Var-declaration-prime", parent=parent)
                 self.match("[", parent=node)
                 self.match("NUM", parent=node)
+                self.code_generator.do_action("#pnum", self.previous_lookahead, self.lookahead)
                 self.match("]", parent=node)
+                self.code_generator.do_action("#declare_array", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "int", "void", "{", "}", "break", "if", "for", "return", "+", "-", "EOF"}:
@@ -200,13 +215,16 @@ class Parser:
     def parse_fun_declaration_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside fun_declaration_prime and seeing", terminal)
             if terminal in {"("}:
                 node = Node("Fun-declaration-prime", parent=parent)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#declare_function", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#open_scope", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#set_function_scope_flag", self.previous_lookahead, self.lookahead)
                 self.parse_params(node)
                 self.match(")", parent=node)
                 self.parse_compound_stmt(node)
+                self.code_generator.do_action("#jump_back", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "int", "void", "{", "}", "break", "if", "for", "return", "+", "-", "EOF"}:
                 self.raise_missing_error("Fun-declaration-prime", parent=parent)
@@ -219,10 +237,10 @@ class Parser:
     def parse_type_specifier(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside type_specifier and seeing", terminal)
             if terminal in {"void"}:
                 node = Node("Type-specifier", parent=parent)
                 self.match("void", parent=node)
+                self.code_generator.do_action("#void_check", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"int"}:
                 node = Node("Type-specifier", parent=parent)
@@ -239,7 +257,6 @@ class Parser:
     def parse_params(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside params and seeing", terminal)
             if terminal in {"void"}:
                 node = Node("Params", parent=parent)
                 self.match("void", parent=node)
@@ -247,8 +264,13 @@ class Parser:
             if terminal in {"int"}:
                 node = Node("Params", parent=parent)
                 self.match("int", parent=node)
+                self.code_generator.do_action("#save_type", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#set_force_declaration_flag", self.previous_lookahead, self.lookahead)
                 self.match("ID", parent=node)
+                self.code_generator.do_action("#pid", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#unset_force_declaration_flag", self.previous_lookahead, self.lookahead)
                 self.parse_param_prime(node)
+                self.code_generator.do_action("#pop_param", self.previous_lookahead, self.lookahead)
                 self.parse_param_list(node)
                 return node
             if terminal in {")"}:
@@ -262,7 +284,6 @@ class Parser:
     def parse_param_list(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside param_list and seeing", terminal)
             if terminal in {","}:
                 node = Node("Param-list", parent=parent)
                 self.match(",", parent=node)
@@ -281,11 +302,11 @@ class Parser:
     def parse_param(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside param and seeing", terminal)
             if terminal in {"int", "void"}:
                 node = Node("Param", parent=parent)
                 self.parse_declaration_initial(node)
                 self.parse_param_prime(node)
+                self.code_generator.do_action("#pop_param", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {")", ","}:
                 self.raise_missing_error("Param", parent=parent)
@@ -298,11 +319,11 @@ class Parser:
     def parse_param_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside param_prime and seeing", terminal)
             if terminal in {"["}:
                 node = Node("Param-prime", parent=parent)
                 self.match("[", parent=node)
                 self.match("]", parent=node)
+                self.code_generator.do_action("#array_param", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {")", ","}:
                 node = Node("Param-prime", parent=parent)
@@ -316,12 +337,13 @@ class Parser:
     def parse_compound_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside compound_stmt and seeing", terminal)
             if terminal in {"{"}:
                 node = Node("Compound-stmt", parent=parent)
+                self.code_generator.do_action("#open_scope", self.previous_lookahead, self.lookahead)
                 self.match("{", parent=node)
                 self.parse_declaration_list(node)
                 self.parse_statement_list(node)
+                self.code_generator.do_action("#close_scope", self.previous_lookahead, self.lookahead)
                 self.match("}", parent=node)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "int", "void", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-", "EOF"}:
@@ -335,7 +357,6 @@ class Parser:
     def parse_statement_list(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside statement_list and seeing", terminal)
             if terminal in {"ID", ";", "NUM", "(", "{", "break", "if", "for", "return", "+", "-"}:
                 node = Node("Statement-list", parent=parent)
                 self.parse_statement(node)
@@ -353,7 +374,6 @@ class Parser:
     def parse_statement(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside statement and seeing", terminal)
             if terminal in {"ID", ";", "NUM", "(", "break", "+", "-"}:
                 node = Node("Statement", parent=parent)
                 self.parse_expression_stmt(node)
@@ -385,10 +405,10 @@ class Parser:
     def parse_expression_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside expression_stmt and seeing", terminal)
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 node = Node("Expression-stmt", parent=parent)
                 self.parse_expression(node)
+                self.code_generator.do_action("#pop", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
                 return node
             if terminal in {";"}:
@@ -398,6 +418,7 @@ class Parser:
             if terminal in {"break"}:
                 node = Node("Expression-stmt", parent=parent)
                 self.match("break", parent=node)
+                self.code_generator.do_action("#break", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-"}:
@@ -411,13 +432,15 @@ class Parser:
     def parse_selection_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside selection_stmt and seeing", terminal)
             if terminal in {"if"}:
                 node = Node("Selection-stmt", parent=parent)
                 self.match("if", parent=node)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
+                self.code_generator.do_action("#save", self.previous_lookahead, self.lookahead)
                 self.parse_statement(node)
                 self.parse_else_stmt(node)
                 return node
@@ -432,16 +455,18 @@ class Parser:
     def parse_else_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside else_stmt and seeing", terminal)
             if terminal in {"endif"}:
                 node = Node("Else-stmt", parent=parent)
                 self.match("endif", parent=node)
+                self.code_generator.do_action("#jpf_from_saved", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"else"}:
                 node = Node("Else-stmt", parent=parent)
                 self.match("else", parent=node)
+                self.code_generator.do_action("#save_and_jpf_from_last_save", self.previous_lookahead, self.lookahead)
                 self.parse_statement(node)
                 self.match("endif", parent=node)
+                self.code_generator.do_action("#jp_from_saved", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-"}:
                 self.raise_missing_error("Else-stmt", parent=parent)
@@ -454,11 +479,11 @@ class Parser:
     def parse_iteration_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside iteration_stmt and seeing", terminal)
             if terminal in {"for"}:
                 node = Node("Iteration-stmt", parent=parent)
                 self.match("for", parent=node)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
                 self.match(";", parent=node)
                 self.parse_expression(node)
@@ -478,11 +503,13 @@ class Parser:
     def parse_return_stmt(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside return_stmt and seeing", terminal)
             if terminal in {"return"}:
                 node = Node("Return-stmt", parent=parent)
                 self.match("return", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_return_stmt_prime(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#jump_back", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-"}:
                 self.raise_missing_error("Return-stmt", parent=parent)
@@ -495,10 +522,10 @@ class Parser:
     def parse_return_stmt_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside return_stmt_prime and seeing", terminal)
             if terminal in {"ID", "+", "-", "(", "NUM"}:
                 node = Node("Return-stmt-prime", parent=parent)
                 self.parse_expression(node)
+                self.code_generator.do_action("#set_return_value", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
                 return node
             if terminal in {";"}:
@@ -516,10 +543,13 @@ class Parser:
     def parse_expression(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside expression and seeing", terminal)
             if terminal in {"ID"}:
                 node = Node("Expression", parent=parent)
                 self.match("ID", parent=node)
+                self.code_generator.do_action("#check_declaration", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#pid", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#uncheck_declaration", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#check_type", self.previous_lookahead, self.lookahead)
                 self.parse_b(node)
                 return node
             if terminal in {"NUM", "(", "+", "-"}:
@@ -537,7 +567,6 @@ class Parser:
     def parse_b(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside b and seeing", terminal)
             if terminal in {";", "]", "(", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("B", parent=parent)
                 self.parse_simple_expression_prime(node)
@@ -545,14 +574,20 @@ class Parser:
             if terminal in {"["}:
                 node = Node("B", parent=parent)
                 self.match("[", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 self.match("]", parent=node)
+                self.code_generator.do_action("#array", self.previous_lookahead, self.lookahead)
                 self.parse_h(node)
                 return node
             if terminal in {"="}:
                 node = Node("B", parent=parent)
                 self.match("=", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#assign", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ","}:
                 self.raise_missing_error("B", parent=parent)
@@ -565,7 +600,6 @@ class Parser:
     def parse_h(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside h and seeing", terminal)
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("H", parent=parent)
                 self.parse_g(node)
@@ -575,7 +609,10 @@ class Parser:
             if terminal in {"="}:
                 node = Node("H", parent=parent)
                 self.match("=", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#assign", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ","}:
                 self.raise_missing_error("H", parent=parent)
@@ -588,7 +625,6 @@ class Parser:
     def parse_simple_expression_zegond(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside simple_expression_zegond and seeing", terminal)
             if terminal in {"NUM", "(", "+", "-"}:
                 node = Node("Simple-expression-zegond", parent=parent)
                 self.parse_additive_expression_zegond(node)
@@ -605,7 +641,6 @@ class Parser:
     def parse_simple_expression_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside simple_expression_prime and seeing", terminal)
             if terminal in {";", "]", "(", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("Simple-expression-prime", parent=parent)
                 self.parse_additive_expression_prime(node)
@@ -622,11 +657,11 @@ class Parser:
     def parse_c(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside c and seeing", terminal)
             if terminal in {"<", "=="}:
                 node = Node("C", parent=parent)
                 self.parse_relop(node)
                 self.parse_additive_expression(node)
+                self.code_generator.do_action("#execute", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ","}:
                 node = Node("C", parent=parent)
@@ -640,14 +675,15 @@ class Parser:
     def parse_relop(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside relop and seeing", terminal)
             if terminal in {"<"}:
                 node = Node("Relop", parent=parent)
                 self.match("<", parent=node)
+                self.code_generator.do_action("#push_operation", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"=="}:
                 node = Node("Relop", parent=parent)
                 self.match("==", parent=node)
+                self.code_generator.do_action("#push_operation", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 self.raise_missing_error("Relop", parent=parent)
@@ -660,7 +696,6 @@ class Parser:
     def parse_additive_expression(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside additive_expression and seeing", terminal)
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 node = Node("Additive-expression", parent=parent)
                 self.parse_term(node)
@@ -677,7 +712,6 @@ class Parser:
     def parse_additive_expression_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside additive_expression_prime and seeing", terminal)
             if terminal in {";", "]", "(", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("Additive-expression-prime", parent=parent)
                 self.parse_term_prime(node)
@@ -694,7 +728,6 @@ class Parser:
     def parse_additive_expression_zegond(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside additive_expression_zegond and seeing", terminal)
             if terminal in {"NUM", "(", "+", "-"}:
                 node = Node("Additive-expression-zegond", parent=parent)
                 self.parse_term_zegond(node)
@@ -711,11 +744,11 @@ class Parser:
     def parse_d(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside d and seeing", terminal)
             if terminal in {"+", "-"}:
                 node = Node("D", parent=parent)
                 self.parse_addop(node)
                 self.parse_term(node)
+                self.code_generator.do_action("#execute", self.previous_lookahead, self.lookahead)
                 self.parse_d(node)
                 return node
             if terminal in {";", "]", ")", ",", "<", "=="}:
@@ -730,14 +763,15 @@ class Parser:
     def parse_addop(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside addop and seeing", terminal)
             if terminal in {"+"}:
                 node = Node("Addop", parent=parent)
                 self.match("+", parent=node)
+                self.code_generator.do_action("#push_operation", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"-"}:
                 node = Node("Addop", parent=parent)
                 self.match("-", parent=node)
+                self.code_generator.do_action("#push_operation", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 self.raise_missing_error("Addop", parent=parent)
@@ -750,7 +784,6 @@ class Parser:
     def parse_term(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside term and seeing", terminal)
             if terminal in {"+", "-", "(", "ID", "NUM"}:
                 node = Node("Term", parent=parent)
                 self.parse_signed_factor(node)
@@ -767,7 +800,6 @@ class Parser:
     def parse_term_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside term_prime and seeing", terminal)
             if terminal in {"+", "-", "(", ")", ";", "<", "==", "]", ",", "*"}:
                 node = Node("Term-prime", parent=parent)
                 self.parse_signed_factor_prime(node)
@@ -784,7 +816,6 @@ class Parser:
     def parse_term_zegond(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside term_zegond and seeing", terminal)
             if terminal in {"+", "-", "(", "NUM"}:
                 node = Node("Term-zegond", parent=parent)
                 self.parse_signed_factor_zegond(node)
@@ -801,11 +832,12 @@ class Parser:
     def parse_g(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside g and seeing", terminal)
             if terminal in {"*"}:
                 node = Node("G", parent=parent)
                 self.match("*", parent=node)
+                self.code_generator.do_action("#push_operation", self.previous_lookahead, self.lookahead)
                 self.parse_signed_factor(node)
+                self.code_generator.do_action("#execute", self.previous_lookahead, self.lookahead)
                 self.parse_g(node)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-"}:
@@ -820,7 +852,6 @@ class Parser:
     def parse_signed_factor(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside signed_factor and seeing", terminal)
             if terminal in {"NUM", "(", "ID"}:
                 node = Node("Signed-factor", parent=parent)
                 self.parse_factor(node)
@@ -834,6 +865,7 @@ class Parser:
                 node = Node("Signed-factor", parent=parent)
                 self.match("-", parent=node)
                 self.parse_factor(node)
+                self.code_generator.do_action("#negate", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
                 self.raise_missing_error("Signed-factor", parent=parent)
@@ -846,7 +878,6 @@ class Parser:
     def parse_signed_factor_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside signed_factor_prime and seeing", terminal)
             if terminal in {"(", ";", ",", ")", "<", "==", "+", "-", "*", "]"}:
                 node = Node("Signed-factor-prime", parent=parent)
                 self.parse_factor_prime(node)
@@ -862,7 +893,6 @@ class Parser:
     def parse_signed_factor_zegond(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside signed_factor_zegond and seeing", terminal)
             if terminal in {"NUM", "("}:
                 node = Node("Signed-factor-zegond", parent=parent)
                 self.parse_factor_zegond(node)
@@ -876,6 +906,7 @@ class Parser:
                 node = Node("Signed-factor-zegond", parent=parent)
                 self.match("-", parent=node)
                 self.parse_factor(node)
+                self.code_generator.do_action("#negate", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
                 self.raise_missing_error("Signed-factor-zegond", parent=parent)
@@ -888,20 +919,25 @@ class Parser:
     def parse_factor(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside factor and seeing", terminal)
             if terminal in {"("}:
                 node = Node("Factor", parent=parent)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
                 return node
             if terminal in {"NUM"}:
                 node = Node("Factor", parent=parent)
                 self.match("NUM", parent=node)
+                self.code_generator.do_action("#pnum", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID"}:
                 node = Node("Factor", parent=parent)
                 self.match("ID", parent=node)
+                self.code_generator.do_action("#check_declaration", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#pid", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#uncheck_declaration", self.previous_lookahead, self.lookahead)
                 self.parse_var_call_prime(node)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
@@ -915,12 +951,14 @@ class Parser:
     def parse_var_call_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside var_call_prime and seeing", terminal)
             if terminal in {"("}:
                 node = Node("Var-call-prime", parent=parent)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_argument_list", self.previous_lookahead, self.lookahead)
                 self.parse_args(node)
+                self.code_generator.do_action("#end_argument_list", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
+                self.code_generator.do_action("#call", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", ")", "+", "-", "<", "==", "*", "]", ",", "["}:
                 node = Node("Var-call-prime", parent=parent)
@@ -937,12 +975,14 @@ class Parser:
     def parse_var_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside var_prime and seeing", terminal)
             if terminal in {"["}:
                 node = Node("Var-prime", parent=parent)
                 self.match("[", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 self.match("]", parent=node)
+                self.code_generator.do_action("#array", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("Var-prime", parent=parent)
@@ -956,12 +996,14 @@ class Parser:
     def parse_factor_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside factor_prime and seeing", terminal)
             if terminal in {"("}:
                 node = Node("Factor-prime", parent=parent)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_argument_list", self.previous_lookahead, self.lookahead)
                 self.parse_args(node)
+                self.code_generator.do_action("#end_argument_list", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
+                self.code_generator.do_action("#call", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
                 node = Node("Factor-prime", parent=parent)
@@ -975,15 +1017,17 @@ class Parser:
     def parse_factor_zegond(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside factor_zegond and seeing", terminal)
             if terminal in {"NUM"}:
                 node = Node("Factor-zegond", parent=parent)
                 self.match("NUM", parent=node)
+                self.code_generator.do_action("#pnum", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"("}:
                 node = Node("Factor-zegond", parent=parent)
                 self.match("(", parent=node)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
                 return node
             if terminal in {";", "]", ")", ",", "<", "==", "+", "-", "*"}:
@@ -997,7 +1041,6 @@ class Parser:
     def parse_args(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside args and seeing", terminal)
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 node = Node("Args", parent=parent)
                 self.parse_arg_list(node)
@@ -1014,10 +1057,10 @@ class Parser:
     def parse_arg_list(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside arg_list and seeing", terminal)
             if terminal in {"ID", "NUM", "(", "+", "-"}:
                 node = Node("Arg-list", parent=parent)
                 self.parse_expression(node)
+                self.code_generator.do_action("#add_argument_count", self.previous_lookahead, self.lookahead)
                 self.parse_arg_list_prime(node)
                 return node
             if terminal in {")"}:
@@ -1031,11 +1074,11 @@ class Parser:
     def parse_arg_list_prime(self, parent):
         while True:
             terminal = self.lookahead.terminal
-            print("inside arg_list_prime and seeing", terminal)
             if terminal in {","}:
                 node = Node("Arg-list-prime", parent=parent)
                 self.match(",", parent=node)
                 self.parse_expression(node)
+                self.code_generator.do_action("#add_argument_count", self.previous_lookahead, self.lookahead)
                 self.parse_arg_list_prime(node)
                 return node
             if terminal in {")"}:

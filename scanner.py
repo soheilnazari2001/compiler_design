@@ -194,7 +194,7 @@ class Scanner:
     def get_next_token(self) -> Token:
         while True:
             token = self._get_next_token()
-            if token.token_type not in hidden_tokens:
+            if token.type not in hidden_tokens:
                 return token
 
     def _get_next_token(self) -> Token:
@@ -220,15 +220,15 @@ class Scanner:
         return Token(self.current_state.state_type, token_name)
 
     def get_tokens(self):
-        token = Token(token_type=TokenType.START.name)
-        while token.token_type != TokenType.EOF.name:
+        token = Token(type=TokenType.START.name)
+        while token.type != TokenType.EOF.name:
             self.current_state = self.start_state
             line_number = self.reader.line_number
             token = self._get_next_token()
 
-            if token.token_type == TokenType.PANIC.name:
+            if token.type == TokenType.PANIC.name:
                 self.errors.setdefault(line_number, []).append(
-                    Token(token.token_value, self.current_state.error)
+                    Token(token.lexeme, self.current_state.error)
                 )
             self.tokens.setdefault(line_number, []).append(token)
 
@@ -237,7 +237,7 @@ class Scanner:
         for line_number, line_tokens in self.tokens.items():
             line_tokens = ""
             for token in line_tokens:
-                if token.token_type not in hidden_tokens:
+                if token.type not in hidden_tokens:
                     line_tokens += str(token) + " "
             if line_tokens:
                 s += str(line_number_str(line_number)) + line_tokens + "\n"

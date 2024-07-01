@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from parser import Parser
 
+from tokens import Token, TokenType
+
 SCOPE_SEMANTIC_ERROR = "Semantic Error! '{}' is not defined."
 VOID_SEMANTIC_ERROR = "Semantic Error! Illegal type of void for '{}'."
 ARG_COUNT_MISMATCH_SEMANTIC_ERROR = (
@@ -70,11 +72,7 @@ class Instruction:
 
     @classmethod
     def print(cls, value):
-        return cls("PRSymbolType.INT.value", value)
-
-
-class SemanticException(Exception):
-    pass
+        return cls("PRINT", value)
 
 
 class SymbolType(Enum):
@@ -138,7 +136,7 @@ class ScopeStack:
 
         if not prevent_add:
             if check_declaration:
-                raise SemanticException(SCOPE_SEMANTIC_ERROR.format(lexeme))
+                self.codegen.raise_undefined_semantic_error(lexeme)
             address = self.codegen.get_next_data_address()
             return self.add_symbol(lexeme, address)
 
@@ -210,8 +208,8 @@ class Actor:
             if len(self.found_arg_type_mismtach) == 0:
                 self.found_arg_type_mismtach.append(True)
             self.found_arg_type_mismtach[-1] = True
-            raise SemanticException(
-                ARG_TYPE_MISMATCH_SEMANTIC_ERROR.format(index, lexeme, expected, got)
+            self.codegen.raise_arg_type_mismatch_semantic_error(
+                index, lexeme, expected, got
             )
 
     def pid(self, previous_token, current_token):
@@ -248,18 +246,14 @@ class Actor:
             )
             if symbol.is_function:
                 if symbol.type != SymbolType.INT.value:
-                    raise SemanticException(
-                        OPERAND_TYPE_MISMATCH_SEMANTIC_ERROR.format(
-                            SymbolType.VOID.value, SymbolType.INT.value
-                        )
+                    self.codegen.raise_operand_type_mismatch_semantic_error(
+                        SymbolType.INT.value, SymbolType.VOID.value
                     )
             else:
                 if symbol.is_array:
                     if current_token.lexeme != "[" and not self.argument_counts:
-                        raise SemanticException(
-                            OPERAND_TYPE_MISMATCH_SEMANTIC_ERROR.format(
-                                SymbolType.ARRAY.value, SymbolType.INT.value
-                            )
+                        self.codegen.raise_operand_type_mismatch_semantic_error(
+                            SymbolType.INT.value, SymbolType.ARRAY.value
                         )
 
     def handle_arg_mismatch(self, current_token, previous_token):
@@ -422,11 +416,10 @@ class Actor:
         offset = self.codegen.semantic_stack.pop()
         temp = self.codegen.get_next_temp_address()
         array_start = self.codegen.semantic_stack.pop()
-        instructions = [
+        self.codegen.add_instructions(
             Instruction.mult(offset, f"#{self.codegen.WORD_SIZE}", temp),
             Instruction.add(temp, f"{array_start}", temp),
-        ]
-        self.codegen.add_instructions(instructions)
+        )
         self.codegen.semantic_stack.append(f"@{temp}")
 
     def until(self, previous_token, current_token):
@@ -440,7 +433,7 @@ class Actor:
 
     def add_break(self, previous_token, current_token):
         if not self.breaks:
-            raise SemanticException(BREAK_SEMANTIC_ERROR)
+            self.codegen.raise_break_semantic_error()
         self.breaks[-1].append(self.codegen.instruction_index)
         self.codegen.instruction_index += 1
 
@@ -518,9 +511,7 @@ class Actor:
         function_name = self.called_functions.pop()
         symbol = self.codegen.scope_stack.find_symbol_by_lexeme(function_name)
         if symbol.param_count != arg_count:
-            raise SemanticException(
-                ARG_COUNT_MISMATCH_SEMANTIC_ERROR.format(function_name)
-            )
+            self.codegen.raise_arg_count_mismatch_semantic_error(function_name)
 
     def retrieve_return_value(self):
         temp = self.codegen.get_next_temp_address()
@@ -577,7 +568,7 @@ class Actor:
 
     def jump_back(self, previous_token, current_token):
         if not self.has_reached_main:
-            instruction = Instruction.jp(self.codegen.return_address_address)
+            instruction = Instruction.jp(str(self.codegen.return_address_address))
             self.codegen.add_instruction(instruction)
 
     def add_argument_count(self, previous_token, current_token):
@@ -609,7 +600,7 @@ class Actor:
         if self.void_flag:
             self.void_flag = False
             self.codegen.scope_stack.remove_symbol(self.current_id)
-            raise SemanticException(VOID_SEMANTIC_ERROR.format(self.current_id))
+            self.codegen.raise_illegal_void_type_semantic_error(self.current_id)
 
     def save_type(self, previous_token, current_token):
         self.current_type = previous_token.lexeme
@@ -626,14 +617,15 @@ class Actor:
         )
         if symbol.is_array:
             if current_token.lexeme != "[" and not self.argument_counts:
-                raise SemanticException(
-                    OPERAND_TYPE_MISMATCH_SEMANTIC_ERROR.format(
-                        SymbolType.ARRAY.value, SymbolType.INT.value
-                    )
+                self.codegen.raise_operand_type_mismatch_semantic_error(
+                    SymbolType.INT.value, SymbolType.ARRAY.value
                 )
 
     def negate(self, previous_token, current_token):
-        value = self.codegen.semantic_stack[-1]
+        value = self.codegen.semantic_stack.pop()
+        temp_address = self.codegen.get_next_temp_address()
+        self.codegen.add_instruction(Instruction.sub("#0", value, temp_address))
+        self.codegen.semantic_stack.append(temp_address)
 
 
 class CodeGenerator:
@@ -647,28 +639,77 @@ class CodeGenerator:
         self.semantic_stack = []
         self.execution_flow_stack = []
         self.instruction_index = 0
-        self.instructions: OrderedDict[int, Instruction] = OrderedDict()
-        self.data_address = 20000
-        self.temp_address = 60000
+        self.instructions: dict[int, Instruction] = {}
+        self.semantic_errors_list: list[str] = []
+        self.data_address = 200000
+        self.temp_address = 600000
         self.stack_start_address = self.temp_address - self.WORD_SIZE
         self.return_address_address = self.get_next_data_address()
         self.return_value_address = self.get_next_data_address()
         self.stack_pointer_address = self.get_next_data_address()
         self.add_instructions(
             Instruction.assign(
-                f"#{self.stack_start_address}", f"@{self.stack_pointer_address}"
+                f"#{self.stack_start_address}", f"{self.stack_pointer_address}"
             ),
-            Instruction.assign("#0", f"@{self.return_address_address}"),
-            Instruction.assign("#0", f"@{self.return_value_address}"),
+            Instruction.assign("#0", f"{self.return_address_address}"),
+            Instruction.assign("#0", f"{self.return_value_address}"),
         )
         self.jump_to_main_address = len(self.instructions)
         self.instruction_index += 1
         self.generate_implicit_output()
 
+    @property
+    def generated_code(self):
+        return (
+            "\n".join(
+                f"{index}\t{repr(self.instructions[index])}"
+                for index in sorted(self.instructions)
+            )
+            if self.instructions and not self.semantic_errors_list
+            else "The output code has not been generated"
+        )
+
+    @property
+    def semantic_errors(self):
+        return (
+            "\n".join(self.semantic_errors_list)
+            if self.semantic_errors_list
+            else "The input program is semantically correct."
+        )
+
+    def raise_semantic_error(self, message):
+        self.semantic_errors_list.append(
+            f"#{self.parser.scanner.reader.line_number} : Semantic Error! {message}"
+        )
+
+    def raise_undefined_semantic_error(self, name):
+        self.raise_semantic_error(f"'{name}' is not defined.")
+
+    def raise_illegal_void_type_semantic_error(self, name):
+        self.raise_semantic_error(f"Illegal type of void for '{name}'.")
+
+    def raise_arg_count_mismatch_semantic_error(self, name):
+        self.raise_semantic_error(f"Mismatch in numbers of arguments of '{name}'.")
+
+    def raise_break_semantic_error(self):
+        self.raise_semantic_error("No 'for' found for 'break'.")
+
+    def raise_operand_type_mismatch_semantic_error(self, expected, actual):
+        self.raise_semantic_error(
+            f"Type mismatch in operands, Got {actual} instead of {expected}."
+        )
+
+    def raise_arg_type_mismatch_semantic_error(self, at, arg_name, expected, actual):
+        self.raise_semantic_error(
+            f"Mismatch in type of argument {arg_name} of '{at}'. Expected '{expected}' but got '{actual}' instead."
+        )
+
     def add_instruction(self, instruction, index=None):
         if index is None:
             index = self.instruction_index
             self.instruction_index += 1
+        elif isinstance(index, str):
+            index = int(index[1:])
 
         self.instructions[index] = instruction
 
@@ -706,7 +747,17 @@ class CodeGenerator:
         self.add_instruction(Instruction.assign(value, self.return_value_address))
 
     def generate_implicit_output(self):
-        pass  # TODO
+        self.do_action("#pid", Token(TokenType.ID, "output"), None)
+        self.do_action("#declare_function", None, None)
+        self.do_action("#open_scope", None, None)
+        self.do_action("#set_function_scope_flag", None, None)
+        self.do_action("#pid", Token(TokenType.ID, "a"), None)
+        self.do_action("#pop_param", None, None)
+        self.do_action("#pid", Token(TokenType.ID, "a"), None)
+        self.do_action("#open_scope", None, None)
+        self.add_instruction(Instruction.print(self.semantic_stack.pop()))
+        self.do_action("#close_scope", None, None)
+        self.do_action("#jump_back", None, None)
 
     def do_action(self, identifier, previous_token, current_token):
         getattr(self.actor, identifier[1:])(previous_token, current_token)
