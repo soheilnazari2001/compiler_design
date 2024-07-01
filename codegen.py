@@ -375,11 +375,11 @@ class Actor:
         if not self.function_scope_flag:
             self.codegen.scope_stack.scopes.append([])
         self.function_scope_flag = False
-        self.codegen.data_and_temp_stack.append((self.codegen.data_address, self.codegen.temp_address))
+        self.codegen.execution_flow_stack.append((self.codegen.data_address, self.codegen.temp_address))
 
     def close_scope(self, previous_token: Token, current_token: Token):
         self.codegen.scope_stack.scopes.pop()
-        self.codegen.data_address, self.codegen.temp_address = self.codegen.data_and_temp_stack.pop()
+        self.codegen.data_address, self.codegen.temp_address = self.codegen.execution_flow_stack.pop()
 
     def pop_param(self, previous_token: Token, current_token: Token):
         address = self.codegen.semantic_stack.pop()
@@ -406,7 +406,7 @@ class Actor:
         self.codegen.function_temp_start_pointer = self.codegen.temp_address
 
     def call(self, previous_token: Token, current_token: Token):
-        self.store_data_and_temp()
+        self.store_execution_flow_stack()
         self.codegen.register_file.push_registers()
 
         arg_count = self.argument_counts.pop()
@@ -415,7 +415,7 @@ class Actor:
         self.make_call(arg_count)
 
         self.codegen.register_file.pop_registers()
-        self.restore_data_and_temp()
+        self.restore_execution_flow_stack()
 
         self.retrieve_return_value()
 
@@ -430,7 +430,7 @@ class Actor:
         self.codegen.add_instruction(
             Assign(self.codegen.register_file.return_value_register_address, temp))
 
-    def restore_data_and_temp(self):
+    def restore_execution_flow_stack(self):
         for address in range(self.codegen.temp_address, self.codegen.function_temp_start_pointer, -WORD_SIZE):
             self.codegen.runtime_stack.pop(address - WORD_SIZE)
         for address in range(self.codegen.data_address, self.codegen.function_data_start_pointer, -WORD_SIZE):
@@ -446,7 +446,7 @@ class Actor:
         instruction = Instruction.jp(address)
         self.codegen.add_instruction(instruction)
 
-    def store_data_and_temp(self):
+    def store_execution_flow_stack(self):
         for address in range(self.codegen.function_data_start_pointer, self.codegen.data_address, WORD_SIZE):
             symbol: Symbol = self.codegen.scope_stack.find_symbol_by_address(address)
             if symbol and symbol.is_initialized:
