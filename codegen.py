@@ -206,7 +206,7 @@ class Actor:
         self.void_line_number = None
         self.found_arg_type_mismtach = []
 
-    def raise_arg_type_mismatch_error(self, index, lexeme, expected, got):
+    def raise_arg_type_mismatch_error(self, lexeme, index, expected, got):
         if not self.found_arg_type_mismtach or not self.found_arg_type_mismtach[-1]:
             if len(self.found_arg_type_mismtach) == 0:
                 self.found_arg_type_mismtach.append(True)
@@ -633,6 +633,20 @@ class Actor:
         temp_address = self.codegen.get_next_temp_address()
         self.codegen.add_instruction(Instruction.sub("#0", value, temp_address))
         self.codegen.semantic_stack.append(temp_address)
+
+    def for_jump_to_condition(self, previous_token, current_token):
+        condition_address = self.codegen.semantic_stack[-5]
+        self.codegen.add_instruction(Instruction.jp(condition_address))
+
+    def for_body_start(self, previous_token, current_token):
+        address = self.codegen.semantic_stack[-1]
+        self.codegen.add_instruction(
+            Instruction.jp(f"#{self.codegen.instruction_index}"),
+            index=address
+        )
+
+    def for_body_end(self, previous_token, current_token):
+        print(self.codegen.semantic_stack)
 
 
 class CodeGenerator:

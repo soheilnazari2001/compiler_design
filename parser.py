@@ -19,7 +19,7 @@ class UnexpectedEOFException(Exception):
 class Parser:
     def __init__(self, input_file):
         self.scanner = Scanner(input_file)
-        self.code_generator = CodeGenerator([])
+        self.code_generator = CodeGenerator(self)
         self.lookahead = None
         self.previous_lookahead = None
         self.errors = []
@@ -418,7 +418,7 @@ class Parser:
             if terminal in {"break"}:
                 node = Node("Expression-stmt", parent=parent)
                 self.match("break", parent=node)
-                self.code_generator.do_action("#break", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#add_break", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-"}:
@@ -485,12 +485,29 @@ class Parser:
                 self.match("(", parent=node)
                 self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#pop", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
+                self.code_generator.do_action("#label", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#save", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#save", self.previous_lookahead, self.lookahead)
                 self.match(";", parent=node)
+                self.code_generator.do_action("#label", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#start_rhs", self.previous_lookahead, self.lookahead)
                 self.parse_expression(node)
+                self.code_generator.do_action("#end_rhs", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#pop", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#for_jump_to_condition", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
+                self.code_generator.do_action("#for_body_start", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#label", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#start_break_scope", self.previous_lookahead, self.lookahead)
                 self.parse_statement(node)
+                self.code_generator.do_action("#for_body_end", self.previous_lookahead, self.lookahead)
+                self.code_generator.do_action("#handle_breaks", self.previous_lookahead, self.lookahead)
                 return node
             if terminal in {"ID", ";", "NUM", "(", "{", "}", "break", "if", "endif", "else", "for", "return", "+", "-"}:
                 self.raise_missing_error("Iteration-stmt", parent=parent)

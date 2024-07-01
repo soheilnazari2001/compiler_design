@@ -19,7 +19,7 @@ class UnexpectedEOFException(Exception):
 class Parser:
     def __init__(self, input_file):
         self.scanner = Scanner(input_file)
-        self.code_generator = CodeGenerator([])
+        self.code_generator = CodeGenerator(self)
         self.lookahead = None
         self.previous_lookahead = None
         self.errors = []
