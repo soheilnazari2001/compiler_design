@@ -134,9 +134,11 @@ class ScopeStack:
                     if symbol.lexeme == lexeme:
                         return symbol
 
+        if check_declaration:
+            self.codegen.raise_undefined_semantic_error(lexeme)
+            return None
+
         if not prevent_add:
-            if check_declaration:
-                self.codegen.raise_undefined_semantic_error(lexeme)
             address = self.codegen.get_next_data_address()
             return self.add_symbol(lexeme, address)
 
@@ -201,9 +203,10 @@ class Actor:
         self.force_declaration_flag = False
         self.current_id = ""
         self.void_flag = False
+        self.void_line_number = None
         self.found_arg_type_mismtach = []
 
-    def raise_arg_type_mismatch_exception(self, index, lexeme, expected, got):
+    def raise_arg_type_mismatch_error(self, index, lexeme, expected, got):
         if not self.found_arg_type_mismtach or not self.found_arg_type_mismtach[-1]:
             if len(self.found_arg_type_mismtach) == 0:
                 self.found_arg_type_mismtach.append(True)
@@ -271,14 +274,14 @@ class Actor:
                     current_symbol.type == SymbolType.ARRAY.value
                     and current_token.lexeme != "["
                 ):
-                    self.raise_arg_type_mismatch_exception(
+                    self.raise_arg_type_mismatch_error(
                         index + 1,
                         symbol.lexeme,
                         SymbolType.INT.value,
                         SymbolType.ARRAY.value,
                     )
                 if current_symbol.type == SymbolType.VOID.value:
-                    self.raise_arg_type_mismatch_exception(
+                    self.raise_arg_type_mismatch_error(
                         index + 1,
                         symbol.lexeme,
                         SymbolType.INT.value,
@@ -286,7 +289,7 @@ class Actor:
                     )
             if param_symbol.type == SymbolType.ARRAY.value:
                 if current_symbol.type == SymbolType.INT.value:
-                    self.raise_arg_type_mismatch_exception(
+                    self.raise_arg_type_mismatch_error(
                         index + 1,
                         symbol.lexeme,
                         SymbolType.ARRAY.value,
@@ -296,14 +299,14 @@ class Actor:
                     current_symbol.type == SymbolType.ARRAY.value
                     and current_token.lexeme == "["
                 ):
-                    self.raise_arg_type_mismatch_exception(
+                    self.raise_arg_type_mismatch_error(
                         index + 1,
                         symbol.lexeme,
                         SymbolType.ARRAY.value,
                         SymbolType.INT.value,
                     )
                 if current_symbol.type == SymbolType.VOID.value:
-                    self.raise_arg_type_mismatch_exception(
+                    self.raise_arg_type_mismatch_error(
                         index + 1,
                         symbol.lexeme,
                         SymbolType.ARRAY.value,
@@ -321,7 +324,7 @@ class Actor:
             )
             param_symbol: Symbol = symbol.param_symbols[index]
             if param_symbol.type == SymbolType.ARRAY.value:
-                self.raise_arg_type_mismatch_exception(
+                self.raise_arg_type_mismatch_error(
                     index + 1,
                     symbol.lexeme,
                     SymbolType.ARRAY.value,
@@ -595,12 +598,16 @@ class Actor:
 
     def void_check(self, previous_token, current_token):
         self.void_flag = True
+        self.void_line_number = self.codegen.parser.scanner.reader.line_number
 
     def void_check_throw(self, previous_token, current_token):
         if self.void_flag:
             self.void_flag = False
             self.codegen.scope_stack.remove_symbol(self.current_id)
-            self.codegen.raise_illegal_void_type_semantic_error(self.current_id)
+            self.codegen.raise_illegal_void_type_semantic_error(
+                self.current_id, line_number=self.void_line_number
+            )
+            self.void_line_number = None
 
     def save_type(self, previous_token, current_token):
         self.current_type = previous_token.lexeme
@@ -615,11 +622,11 @@ class Actor:
         symbol = self.scope_stack.find_symbol_by_lexeme(
             self.current_id, prevent_add=True
         )
-        if symbol.is_array:
-            if current_token.lexeme != "[" and not self.argument_counts:
-                self.codegen.raise_operand_type_mismatch_semantic_error(
-                    SymbolType.INT.value, SymbolType.ARRAY.value
-                )
+        # if symbol.is_array:
+        #     if current_token.lexeme != "[" and not self.argument_counts:
+        #         self.codegen.raise_operand_type_mismatch_semantic_error(
+        #             SymbolType.INT.value, SymbolType.ARRAY.value
+        #         )
 
     def negate(self, previous_token, current_token):
         value = self.codegen.semantic_stack.pop()
@@ -666,7 +673,7 @@ class CodeGenerator:
                 for index in sorted(self.instructions)
             )
             if self.instructions and not self.semantic_errors_list
-            else "The output code has not been generated"
+            else "The code has not been generated."
         )
 
     @property
@@ -677,31 +684,43 @@ class CodeGenerator:
             else "The input program is semantically correct."
         )
 
-    def raise_semantic_error(self, message):
+    def raise_semantic_error(self, message, line_number=None):
         self.semantic_errors_list.append(
-            f"#{self.parser.scanner.reader.line_number} : Semantic Error! {message}"
+            f"#{self.parser.scanner.reader.line_number if line_number is None else line_number} : Semantic Error! {message}"
         )
 
-    def raise_undefined_semantic_error(self, name):
-        self.raise_semantic_error(f"'{name}' is not defined.")
+    def raise_undefined_semantic_error(self, name, line_number=None):
+        self.raise_semantic_error(f"'{name}' is not defined.", line_number=line_number)
 
-    def raise_illegal_void_type_semantic_error(self, name):
-        self.raise_semantic_error(f"Illegal type of void for '{name}'.")
-
-    def raise_arg_count_mismatch_semantic_error(self, name):
-        self.raise_semantic_error(f"Mismatch in numbers of arguments of '{name}'.")
-
-    def raise_break_semantic_error(self):
-        self.raise_semantic_error("No 'for' found for 'break'.")
-
-    def raise_operand_type_mismatch_semantic_error(self, expected, actual):
+    def raise_illegal_void_type_semantic_error(self, name, line_number=None):
         self.raise_semantic_error(
-            f"Type mismatch in operands, Got {actual} instead of {expected}."
+            f"Illegal type of void for '{name}'.", line_number=line_number
         )
 
-    def raise_arg_type_mismatch_semantic_error(self, at, arg_name, expected, actual):
+    def raise_arg_count_mismatch_semantic_error(self, name, line_number=None):
         self.raise_semantic_error(
-            f"Mismatch in type of argument {arg_name} of '{at}'. Expected '{expected}' but got '{actual}' instead."
+            f"Mismatch in numbers of arguments of '{name}'.", line_number=line_number
+        )
+
+    def raise_break_semantic_error(self, line_number=None):
+        self.raise_semantic_error(
+            "No 'for' found for 'break'.", line_number=line_number
+        )
+
+    def raise_operand_type_mismatch_semantic_error(
+        self, actual, expected, line_number=None
+    ):
+        self.raise_semantic_error(
+            f"Type mismatch in operands, Got {actual} instead of {expected}.",
+            line_number=line_number,
+        )
+
+    def raise_arg_type_mismatch_semantic_error(
+        self, at, arg_name, expected, actual, line_number=None
+    ):
+        self.raise_semantic_error(
+            f"Mismatch in type of argument {arg_name} of '{at}'. Expected '{expected}' but got '{actual}' instead.",
+            line_number=line_number,
         )
 
     def add_instruction(self, instruction, index=None):
@@ -760,4 +779,8 @@ class CodeGenerator:
         self.do_action("#jump_back", None, None)
 
     def do_action(self, identifier, previous_token, current_token):
-        getattr(self.actor, identifier[1:])(previous_token, current_token)
+        try:
+            getattr(self.actor, identifier[1:])(previous_token, current_token)
+        except Exception as exception:
+            if not self.semantic_errors_list:
+                raise exception
