@@ -83,7 +83,7 @@ class SymbolType(Enum):
 
 class Symbol:
     def __init__(
-        self, /, *, address=None, lexeme=None, type=None, size=0, param_count=0
+            self, /, *, address=None, lexeme=None, type=None, size=0, param_count=0
     ):
         self.address = address
         self.lexeme = lexeme
@@ -114,7 +114,7 @@ class ScopeStack:
                 return
 
     def find_address_by_lexeme(
-        self, lexeme, check_declaration=False, force_declaration=False
+            self, lexeme, check_declaration=False, force_declaration=False
     ):
         symbol = self.find_symbol_by_lexeme(
             lexeme, check_declaration, force_declaration
@@ -122,11 +122,11 @@ class ScopeStack:
         return symbol.address if symbol else None
 
     def find_symbol_by_lexeme(
-        self,
-        lexeme,
-        check_declaration=False,
-        force_declaration=False,
-        prevent_add=False,
+            self,
+            lexeme,
+            check_declaration=False,
+            force_declaration=False,
+            prevent_add=False,
     ):
         if not force_declaration:
             for scope in reversed(self.scopes):
@@ -271,8 +271,8 @@ class Actor:
             )
             if param_symbol.type == SymbolType.INT.value:
                 if (
-                    current_symbol.type == SymbolType.ARRAY.value
-                    and current_token.lexeme != "["
+                        current_symbol.type == SymbolType.ARRAY.value
+                        and current_token.lexeme != "["
                 ):
                     self.raise_arg_type_mismatch_error(
                         index + 1,
@@ -296,8 +296,8 @@ class Actor:
                         SymbolType.INT.value,
                     )
                 if (
-                    current_symbol.type == SymbolType.ARRAY.value
-                    and current_token.lexeme == "["
+                        current_symbol.type == SymbolType.ARRAY.value
+                        and current_token.lexeme == "["
                 ):
                     self.raise_arg_type_mismatch_error(
                         index + 1,
@@ -411,7 +411,7 @@ class Actor:
         )
         if len(self.codegen.scope_stack.scopes) > 1:
             for address in range(
-                array_start_address, array_start_address + size, self.codegen.WORD_SIZE
+                    array_start_address, array_start_address + size, self.codegen.WORD_SIZE
             ):
                 self.codegen.add_instruction(Instruction.assign("#0", address))
 
@@ -525,15 +525,15 @@ class Actor:
 
     def restore_execution_flow(self):
         for address in range(
-            self.codegen.temp_address,
-            self.codegen.function_temp_start_pointer,
-            -self.codegen.WORD_SIZE,
+                self.codegen.temp_address,
+                self.codegen.function_temp_start_pointer,
+                -self.codegen.WORD_SIZE,
         ):
             self.codegen.runtime_stack.pop(address - self.codegen.WORD_SIZE)
         for address in range(
-            self.codegen.data_address,
-            self.codegen.function_data_start_pointer,
-            -self.codegen.WORD_SIZE,
+                self.codegen.data_address,
+                self.codegen.function_data_start_pointer,
+                -self.codegen.WORD_SIZE,
         ):
             symbol: Symbol = self.codegen.scope_stack.find_symbol_by_address(
                 address - self.codegen.WORD_SIZE
@@ -551,17 +551,17 @@ class Actor:
 
     def store_execution_flow(self):
         for address in range(
-            self.codegen.function_data_start_pointer,
-            self.codegen.data_address,
-            self.codegen.WORD_SIZE,
+                self.codegen.function_data_start_pointer,
+                self.codegen.data_address,
+                self.codegen.WORD_SIZE,
         ):
             symbol: Symbol = self.codegen.scope_stack.find_symbol_by_address(address)
             if symbol and symbol.is_initialized:
                 self.codegen.runtime_stack.push(address)
         for address in range(
-            self.codegen.function_temp_start_pointer,
-            self.codegen.temp_address,
-            self.codegen.WORD_SIZE,
+                self.codegen.function_temp_start_pointer,
+                self.codegen.temp_address,
+                self.codegen.WORD_SIZE,
         ):
             self.codegen.runtime_stack.push(address)
 
@@ -646,7 +646,13 @@ class Actor:
         )
 
     def for_body_end(self, previous_token, current_token):
-        print(self.codegen.semantic_stack)
+        address = self.codegen.semantic_stack[-4]
+        condition = self.codegen.semantic_stack[-5]
+        self.codegen.add_instruction(
+            Instruction.jpf(condition, f"{self.codegen.instruction_index}"), address
+        )
+        addressjp = self.codegen.semantic_stack[-2]
+        self.codegen.add_instruction(Instruction.jp(addressjp), index=self.codegen.instruction_index)
 
 
 class CodeGenerator:
@@ -722,7 +728,7 @@ class CodeGenerator:
         )
 
     def raise_operand_type_mismatch_semantic_error(
-        self, actual, expected, line_number=None
+            self, actual, expected, line_number=None
     ):
         self.raise_semantic_error(
             f"Type mismatch in operands, Got {actual} instead of {expected}.",
@@ -730,7 +736,7 @@ class CodeGenerator:
         )
 
     def raise_arg_type_mismatch_semantic_error(
-        self, at, arg_name, expected, actual, line_number=None
+            self, at, arg_name, expected, actual, line_number=None
     ):
         self.raise_semantic_error(
             f"Mismatch in type of argument {arg_name} of '{at}'. Expected '{expected}' but got '{actual}' instead.",
