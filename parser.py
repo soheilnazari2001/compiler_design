@@ -503,7 +503,6 @@ class Parser:
                 self.code_generator.do_action("#for_jump_to_condition", self.previous_lookahead, self.lookahead)
                 self.match(")", parent=node)
                 self.code_generator.do_action("#for_body_start", self.previous_lookahead, self.lookahead)
-                self.code_generator.do_action("#label", self.previous_lookahead, self.lookahead)
                 self.code_generator.do_action("#start_break_scope", self.previous_lookahead, self.lookahead)
                 self.parse_statement(node)
                 self.code_generator.do_action("#for_body_end", self.previous_lookahead, self.lookahead)

@@ -541,7 +541,6 @@ PREDICTIVE_SET = {
                 "#for_jump_to_condition",
                 ")",
                 "#for_body_start",
-                "#label",
                 "#start_break_scope",
                 "statement",
                 "#for_body_end",
