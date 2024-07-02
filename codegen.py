@@ -537,14 +537,21 @@ class Actor:
 
     def restore_execution_flow(self):
         pushed_temp_addresses = self.pushed_temp_addresses_stack.pop()
+        print("at restore, temp_address =", self.codegen.temp_address, "and function_temp_start_pointer =", self.codegen.function_temp_start_pointer)
         for address in range(
             self.codegen.temp_address,
-            self.codegen.function_temp_start_pointer,
+            self.codegen.function_temp_start_pointer-self.codegen.WORD_SIZE,
             -self.codegen.WORD_SIZE,
         ):
             temp_address = address - self.codegen.WORD_SIZE
             if pushed_temp_addresses is not None and temp_address in pushed_temp_addresses:
                 self.codegen.runtime_stack.pop(temp_address)
+                print("restoring", address)
+            else:
+                # print("is", address, "not initialized? - at restore")
+                # self.codegen.add_instruction(Instruction.print(address))
+                # self.codegen.add_instruction(Instruction.print(address))
+                pass
         for address in range(
             self.codegen.data_address,
             self.codegen.function_data_start_pointer,
@@ -574,14 +581,19 @@ class Actor:
             if symbol and symbol.is_initialized:
                 self.codegen.runtime_stack.push(address)
         self.pushed_temp_addresses_stack.append(self.initialized_temp_addresses.copy())
+        print("at store, temp_address =", self.codegen.temp_address, "and function_temp_start_pointer =", self.codegen.function_temp_start_pointer)
         for address in range(
             self.codegen.function_temp_start_pointer,
-            self.codegen.temp_address,
+            self.codegen.temp_address+self.codegen.WORD_SIZE,
             self.codegen.WORD_SIZE,
         ):
-            print("temp store", address)
             if address in self.pushed_temp_addresses_stack[-1]:
                 self.codegen.runtime_stack.push(address)
+                print("storing", address)
+            else:
+                # print("is", address, "not initialized? - at store")
+                # self.codegen.add_instruction(Instruction.print(address))
+                pass
 
     def set_return_value(self, previous_token, current_token):
         value = self.codegen.semantic_stack.pop()
