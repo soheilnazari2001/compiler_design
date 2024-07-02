@@ -578,7 +578,6 @@ PREDICTIVE_SET = {
                 "#check_declaration",
                 "#pid",
                 "#uncheck_declaration",
-                "#check_type",
                 "b",
             ],
             ("NUM", "(", "+", "-"): ["simple_expression_zegond"],

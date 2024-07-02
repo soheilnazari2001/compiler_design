@@ -205,6 +205,8 @@ class Actor:
         self.void_flag = False
         self.void_line_number = None
         self.found_arg_type_mismtach = []
+        self.initialized_temp_addresses: set[str] = set()
+        self.pushed_temp_addresses_stack: list[set[str]] = []
 
     def raise_arg_type_mismatch_error(self, lexeme, index, expected, got):
         if not self.found_arg_type_mismtach or not self.found_arg_type_mismtach[-1]:
@@ -352,6 +354,7 @@ class Actor:
         operation = self.codegen.semantic_stack.pop()
         operand1 = self.codegen.semantic_stack.pop()
         self.codegen.semantic_stack.append(temp_address)
+        # self.initialized_temp_addresses.add(temp_address)
         instruction = self.INSTRUCTION_FROM_OPERATION[operation](
             operand1, operand2, temp_address
         )
@@ -395,6 +398,8 @@ class Actor:
         symbol: Symbol = self.codegen.scope_stack.find_symbol_by_address(address)
         if symbol:
             symbol.is_initialized = True
+        else:
+            self.initialized_temp_addresses.add(address)
 
     def start_no_push(self, previous_token, current_token):
         if not self.function_scope_flag:
@@ -404,7 +409,6 @@ class Actor:
         self.no_push_flag = False
 
     def declare_array(self, previous_token, current_token):
-        # use [1:] to skip the '#'
         length = int(self.codegen.semantic_stack.pop()[1:])
         symbol: Symbol = self.codegen.scope_stack.scopes[-1][-1]
         symbol.is_array = True
@@ -491,6 +495,8 @@ class Actor:
         if symbol:
             symbol.is_initialized = True
             self.current_declared_function_symbol.param_count += 1
+        else:
+            self.initialized_temp_addresses.add(address)
 
     def declare_function(self, previous_token, current_token):
         symbol: Symbol = self.codegen.scope_stack.scopes[-1][-1]
@@ -504,7 +510,6 @@ class Actor:
         self.codegen.function_temp_start_pointer = self.codegen.temp_address
 
     def call(self, previous_token, current_token):
-        print(self.codegen.semantic_stack)
         self.store_execution_flow()
         self.codegen.push_addresses()
 
@@ -531,12 +536,15 @@ class Actor:
         )
 
     def restore_execution_flow(self):
+        pushed_temp_addresses = self.pushed_temp_addresses_stack.pop()
         for address in range(
             self.codegen.temp_address,
             self.codegen.function_temp_start_pointer,
             -self.codegen.WORD_SIZE,
         ):
-            self.codegen.runtime_stack.pop(address - self.codegen.WORD_SIZE)
+            temp_address = address - self.codegen.WORD_SIZE
+            if pushed_temp_addresses is not None and temp_address in pushed_temp_addresses:
+                self.codegen.runtime_stack.pop(temp_address)
         for address in range(
             self.codegen.data_address,
             self.codegen.function_data_start_pointer,
@@ -565,12 +573,15 @@ class Actor:
             symbol: Symbol = self.codegen.scope_stack.find_symbol_by_address(address)
             if symbol and symbol.is_initialized:
                 self.codegen.runtime_stack.push(address)
+        self.pushed_temp_addresses_stack.append(self.initialized_temp_addresses.copy())
         for address in range(
             self.codegen.function_temp_start_pointer,
             self.codegen.temp_address,
             self.codegen.WORD_SIZE,
         ):
-            self.codegen.runtime_stack.push(address)
+            print("temp store", address)
+            if address in self.pushed_temp_addresses_stack[-1]:
+                self.codegen.runtime_stack.push(address)
 
     def set_return_value(self, previous_token, current_token):
         value = self.codegen.semantic_stack.pop()
@@ -624,16 +635,6 @@ class Actor:
 
     def end_rhs(self, previous_token, current_token):
         self.is_rhs = False
-
-    def check_type(self, previous_token, current_token):
-        symbol = self.scope_stack.find_symbol_by_lexeme(
-            self.current_id, prevent_add=True
-        )
-        # if symbol.is_array:
-        #     if current_token.lexeme != "[" and not self.argument_counts:
-        #         self.codegen.raise_operand_type_mismatch_semantic_error(
-        #             SymbolType.INT.value, SymbolType.ARRAY.value
-        #         )
 
     def negate(self, previous_token, current_token):
         value = self.codegen.semantic_stack.pop()

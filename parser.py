@@ -565,7 +565,6 @@ class Parser:
                 self.code_generator.do_action("#check_declaration", self.previous_lookahead, self.lookahead)
                 self.code_generator.do_action("#pid", self.previous_lookahead, self.lookahead)
                 self.code_generator.do_action("#uncheck_declaration", self.previous_lookahead, self.lookahead)
-                self.code_generator.do_action("#check_type", self.previous_lookahead, self.lookahead)
                 self.parse_b(node)
                 return node
             if terminal in {"NUM", "(", "+", "-"}:
